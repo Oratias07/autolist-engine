@@ -23,6 +23,7 @@ It contains no business decisions about products.
 ## Files
 | File | Phase | Responsibility |
 |---|---|---|
+| `errors.py` | P0 | The error hierarchy listed under Errors. |
 | `models.py` | P0 | Pydantic v2 models. P0 set: `StoreConfig`, `Provenance`, `SourcedValue[T]`, `CostEntry`, `Job` (skeleton), `JobState`. Product models (`ProductDraft`, `ProductVersion`) are added in the content phase, by updating this SPEC first. |
 | `config.py` | P0 | Loads `$AUTOLIST_STORE_DIR/store.yaml` into `StoreConfig`. Any missing required key raises `ConfigMissing(key)`. There are no defaults for client values. |
 | `logging.py` | P0 | Structured JSON logging plus a redaction filter (see Side effects). |
@@ -76,7 +77,7 @@ class CostEntry(BaseModel):
 - **Never** network calls, email or store writes.
 
 ## Errors
-`ConfigMissing`, `MissingProvenance`, `IllegalTransition`, `CostCapExceeded`, `JobLocked`. All inherit from `AutolistError` and carry a machine-readable `code`.
+`ConfigMissing`, `ConfigInvalid` (key present, wrong type or range), `MissingProvenance`, `IllegalTransition`, `CostCapExceeded`, `JobLocked`. All inherit from `AutolistError` and carry a machine-readable `code`.
 
 ## Allowed dependencies
 Standard library, pydantic, pyyaml, google-cloud-firestore (`job_store` and `cost_ledger` only), google-cloud-secret-manager (`config.get_secret` only). No imports from any other autolist module.
@@ -95,3 +96,18 @@ Standard library, pydantic, pyyaml, google-cloud-firestore (`job_store` and `cos
    - a new month resets the state
 4. Redaction: a log record containing `Authorization: Bearer abc`, `{"api_token": "x"}`, or the literal secret value shows none of them. This is checked by a test that captures log output.
 5. Coverage is at least 90% for `core`, and `lint-imports` passes.
+
+## Implementation notes (P0-03, 2026-10-30)
+These record how the approved behavior was implemented. No behavior was added.
+- **Config.**
+  - Every key in `store.yaml` must be present. Unknown keys are rejected (`ConfigInvalid`), which catches typos.
+  - A value documented as "filled later" may be `null`. `StoreConfig.require("a.b.c")` raises `ConfigMissing("a.b.c")` when code needs it.
+  - The publishing switch can be `true` only with `enabled_by` and `enabled_at` set.
+- **Cost ledger.**
+  - The clock is injectable, so `authorize(job_id, provider, operation, est_usd)` keeps the SPEC signature.
+  - `require(...)` is `authorize` that raises `CostCapExceeded`.
+  - `record(entry)` returns the threshold events it newly triggered, and the orchestrator forwards them.
+  - Storage: `InMemoryLedgerStore`, plus `JsonFileLedgerStore` for P0 spikes. Firestore comes in P1.
+- **Job states (skeleton).**
+  - Only the states named in the project doc: RECEIVED, NEEDS_INFO, RESEARCHING, GENERATING, AWAITING_APPROVAL, REVISING, APPROVED, PUBLISHING, PUBLISHED, FAILED, EXPIRED.
+  - A state for `cancel` is not defined anywhere yet. It is left to the P1 state_machine SPEC (open question).
