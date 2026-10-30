@@ -27,6 +27,7 @@ class LedgerState(BaseModel):
     month_totals: dict[str, Decimal] = Field(default_factory=dict)
     job_totals: dict[str, Decimal] = Field(default_factory=dict)
     alerts_sent: dict[str, list[Decimal]] = Field(default_factory=dict)
+    pending_alerts: list[CostThresholdCrossed] = Field(default_factory=list)
     entries: list[CostEntry] = Field(default_factory=list)
 
 
@@ -159,5 +160,19 @@ class CostLedger:
                             monthly_cap=self._costs.monthly_cap,
                         )
                     )
+            state.pending_alerts.extend(events)
+            self._store.save(state)
+            return events
+
+    def drain_alerts(self) -> list[CostThresholdCrossed]:
+        """Return and clear threshold events not yet delivered (the orchestrator's outbox).
+
+        Callers deep inside modules (llm, images) record costs but do not send anything, so
+        events are kept here until the orchestrator drains them and passes them to channels.
+        """
+        with self._lock:
+            state = self._store.load()
+            events = list(state.pending_alerts)
+            state.pending_alerts.clear()
             self._store.save(state)
             return events

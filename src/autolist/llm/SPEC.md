@@ -71,3 +71,15 @@ One HTTPS call per attempt to the provider. Cost ledger entries.
 3. With a mocked transport, an invalid-JSON response triggers exactly one repair call and then `LLMOutputInvalid`.
 4. Cost: a call refused by the ledger sends zero HTTP requests (transport mock asserts no call).
 5. Live smoke (manual, P0-06): one `extract` call on a real Hebrew sample returns schema-valid JSON. The logged cost entry matches the Console usage within 5%.
+
+## Implementation notes (P0-07 offline part, 2026-10-30)
+These record how the approved behavior was implemented.
+- **Files.** `errors.py` holds `PromptVariableError`, `PromptMissing` (file absent, no front matter, `status: not-written`, or empty body), `LLMOutputInvalid` and `LLMUnavailable`.
+- **No prompt text in Python.** The JSON-only instruction and the repair message are store-repo prompts: `agent/prompts/system_json_output.md` (variable `schema`) and `system_json_repair.md` (variable `error`). Every store repo must have them.
+- **Prices.** `store.yaml` → `llm.prices` has the shape `{<model_id>: {input_usd_per_mtok, output_usd_per_mtok}}`. The values are copied from the official price page, with the date, at P0-07 live.
+  - A missing table raises `ConfigMissing`. A model without a price, or an unreadable price, raises `ConfigInvalid`.
+  - Either way, the error comes before any request.
+- **Estimate.** Before each call (and before the repair call), the input is estimated at its UTF-8 byte count, which is never less than its token count, plus the full `max_output_tokens`. That is conservative.
+- **Retries.** The SDK's own retries are off. 429, 529 and 5xx, timeouts and connection errors: at most 3 tries in total, honoring `retry-after`, then backoff 1 s → 2 s. Any other 4xx is not retried.
+- **Transport.** The SDK uses `httpx2`. Tests inject an `httpx2.MockTransport`.
+- **Alerts.** Threshold events from `record()` stay in the ledger outbox (core amendment) until the orchestrator drains them.
