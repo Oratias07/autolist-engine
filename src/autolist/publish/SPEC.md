@@ -83,3 +83,20 @@ HTTPS calls to iStores. Registry writes. Structured logs, with the token redacte
    - list, read, categories, languages and stock statuses return 200
    - a hidden test product is created, read back, then deleted, and is never visible on the storefront
    - whether image URLs are copied to the CDN is checked on that product
+
+## Implementation notes (P0-04, 2026-10-30)
+These record how the approved behavior was implemented. No behavior was added.
+- **Files.** `errors.py` holds the errors above. `registry.py` holds the `created_products` registry: in-memory, plus a JSON file for P0. Firestore comes in P1.
+- **Allowlist.** Full-match patterns on the path, with the query string ignored:
+  - `GET /products/{int}/{int}` and `GET /products/{int}`
+  - `POST /products`
+  - `PUT /products/{int}` and `DELETE /products/{int}`
+  - `GET /categories[/…]`
+  - `GET /misc/…`
+  `PUT /products/bulk`, `/orders`, `/order/…` and `/customers` are refused before any I/O.
+- **Unhide read-back.** iStores does not document the shape of `GET /products/{id}` (only `{success, product, request_id}`). The check reads `price`, `product_category` and `product_description[lang].name`, the names from the documented POST body, and **fails closed**: a missing or unreadable field refuses the unhide. The real shape is confirmed in P0-05/P0-06 and then written here. `required_name_languages: null` raises `ConfigMissing`.
+- **Retries.**
+  - A 429 means the request was rejected, so it is retried for every method, POST included, at most 3 times.
+  - Timeouts and 5xx are retried only for GET and PUT.
+  - POST and DELETE are never retried on them.
+- **Logging.** One structured line per call: method, path, status, and a response excerpt of up to 2 KB. The token is registered with the redaction filter when the client is constructed.
