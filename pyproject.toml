@@ -1,0 +1,86 @@
+[project]
+name = "autolist"
+version = "0.0.1"
+description = "Email-driven product listing agent (engine)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pydantic>=2.7",
+  "pyyaml>=6.0",
+  "httpx>=0.27",
+  "jinja2>=3.1",
+  "anthropic",
+  "google-genai",
+  "google-cloud-firestore",
+  "google-cloud-secret-manager",
+  "google-cloud-storage",
+  "google-api-python-client",
+  "google-auth",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio",
+  "pytest-cov",
+  "respx",
+  "ruff",
+  "mypy",
+  "types-PyYAML",
+  "import-linter",
+  "pip-audit",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/autolist"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["**/*.md"]  # SPEC code blocks are illustrative, not formatted code
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --cov=autolist --cov-report=term-missing"
+markers = ["live: calls a real external service; never runs in CI"]
+
+# ---- Module boundaries (CLAUDE.md rule 3). CI fails on violation. ----
+[tool.importlinter]
+root_package = "autolist"
+
+[[tool.importlinter.contracts]]
+name = "Feature modules never import each other"
+type = "independence"
+modules = [
+  "autolist.channels",
+  "autolist.agent_runtime",
+  "autolist.intake",
+  "autolist.research",
+  "autolist.content",
+  "autolist.images",
+  "autolist.review",
+  "autolist.publish",
+]
+
+[[tool.importlinter.contracts]]
+name = "Layers: orchestrator > feature modules > llm > core"
+type = "layers"
+layers = [
+  "autolist.orchestrator",
+  "autolist.channels | autolist.agent_runtime | autolist.intake | autolist.research | autolist.content | autolist.images | autolist.review | autolist.publish",
+  "autolist.llm",
+  "autolist.core",
+]

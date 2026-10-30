@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+*.key
+*.pem
+credentials*.json
+token*.json
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+# local-only P0 state (never commit)
+.local/

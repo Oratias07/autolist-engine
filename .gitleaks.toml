@@ -1,0 +1,9 @@
+# Default gitleaks rules + rules for keys this project uses that the pinned default set misses.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key"
+regex = '''sk-ant-(?:api|admin)\d{2}-[A-Za-z0-9_\-]{20,}'''
+keywords = ["sk-ant-"]
