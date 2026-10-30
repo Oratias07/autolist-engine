@@ -3,6 +3,7 @@ module: core
 status: approved
 approved_by: DEV (Or)
 approved_at: 2026-10-30
+amendment_proposed: 2026-10-30   # alert outbox (see 'Proposed amendment'); awaiting DEV approval
 phase: 0 (parts marked P0), rest in later phases
 ---
 
@@ -111,3 +112,13 @@ These record how the approved behavior was implemented. No behavior was added.
 - **Job states (skeleton).**
   - Only the states named in the project doc: RECEIVED, NEEDS_INFO, RESEARCHING, GENERATING, AWAITING_APPROVAL, REVISING, APPROVED, PUBLISHING, PUBLISHED, FAILED, EXPIRED.
   - A state for `cancel` is not defined anywhere yet. It is left to the P1 state_machine SPEC (open question).
+
+## Proposed amendment (2026-10-30, awaiting approval): alert outbox
+**Problem.** Paid calls are recorded deep inside modules (`llm`, later `images`), and those modules must not send anything. If `record()` only returns the threshold events, they are lost on the way, and the owner never gets the 30/40/50 USD alerts.
+
+**Change.**
+- The ledger also keeps every new threshold event in a persisted outbox (`pending_alerts`).
+- `drain_alerts()` returns the outbox and clears it. The orchestrator calls it after each step and passes the events to `channels`.
+- `record()` still returns the events, so nothing else changes.
+
+**Acceptance.** Two crossings recorded through any module come out of `drain_alerts()` exactly once.

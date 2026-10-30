@@ -129,3 +129,12 @@ def test_json_file_store_roundtrip(tmp_path: Path, store_data: dict[str, Any]) -
     reopened = CostLedger(cfg.costs, cfg.store.timezone, JsonFileLedgerStore(path), clock)
     assert reopened.month_spend() == Decimal(30)
     assert reopened.record(_entry("1", clock.now)) == []  # 30 was already sent
+
+
+def test_alerts_are_kept_in_an_outbox_until_drained(ledger_parts: tuple[CostLedger, Clock]) -> None:
+    ledger, clock = ledger_parts
+    ledger.record(_entry("31.00", clock.now, job_id=None))
+    ledger.record(_entry("10.00", clock.now, job_id=None))
+    drained = ledger.drain_alerts()
+    assert [e.threshold for e in drained] == [Decimal(30), Decimal(40)]
+    assert ledger.drain_alerts() == []
