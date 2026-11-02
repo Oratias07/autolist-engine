@@ -120,7 +120,7 @@ async def test_foreign_product_guard(method: str) -> None:
 @pytest.mark.parametrize("hidden", [None, 0, "0", False])
 async def test_create_requires_hidden(hidden: Any) -> None:
     client, rec, _, _ = make_client(lambda r: OK)
-    body: dict[str, Any] = {"product_description": {"3": {"name": "x"}}}
+    body: dict[str, Any] = {"product_description": {"3": {"name": "x"}}, "status": 0}
     if hidden is not None:
         body["hidden"] = hidden
     with pytest.raises(UnsafeCreate):
@@ -129,19 +129,31 @@ async def test_create_requires_hidden(hidden: Any) -> None:
     await client.aclose()
 
 
+@pytest.mark.parametrize("status", [None, 1, "1", True])
+async def test_create_requires_status_zero(status: Any) -> None:
+    client, rec, _, _ = make_client(lambda r: OK)
+    body: dict[str, Any] = {"hidden": 1}
+    if status is not None:
+        body["status"] = status
+    with pytest.raises(UnsafeCreate, match="status"):
+        await client.create_product(body, job_id="job-1")
+    assert rec.calls == []
+    await client.aclose()
+
+
 async def test_create_parses_id_and_registers() -> None:
     client, rec, reg, _ = make_client(lambda r: httpx.Response(200, text='"productID: 970"'))
-    pid = await client.create_product({"hidden": 1, "price": 25}, job_id="job-1")
+    pid = await client.create_product({"hidden": 1, "status": 0, "price": 25}, job_id="job-1")
     assert pid == 970
     assert reg.is_active(970)
-    assert json.loads(rec.calls[0].content) == {"hidden": 1, "price": 25}
+    assert json.loads(rec.calls[0].content) == {"hidden": 1, "status": 0, "price": 25}
     await client.aclose()
 
 
 async def test_create_without_id_raises_unknown_and_registers_nothing() -> None:
     client, _, reg, _ = make_client(lambda r: httpx.Response(200, text="created"))
     with pytest.raises(CreateResultUnknown):
-        await client.create_product({"hidden": True}, job_id=None)
+        await client.create_product({"hidden": True, "status": False}, job_id=None)
     assert reg.get(970) is None
     await client.aclose()
 

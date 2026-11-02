@@ -201,13 +201,16 @@ class IStoresClient:
     # ------------------------------------------------------------------ writes
 
     async def create_product(self, body: Mapping[str, Any], job_id: str | None) -> int:
-        """POST a hidden product, record its id in the registry, return the id.
+        """POST a hidden and disabled product, record its id in the registry, return the id.
 
         Never retried on timeout or 5xx. If no id can be parsed, raises
         ``CreateResultUnknown``: the caller searches by SKU before doing anything else.
         """
         if not _is_truthy_flag(body.get("hidden")):
             raise UnsafeCreate("products must be created with hidden: 1")
+        if not _is_falsy_flag(body.get("status")):
+            # hidden alone is still reachable by direct URL (P0-06b); disabled returns 404
+            raise UnsafeCreate("products must be created with status: 0")
         check_allowed("POST", "/products")
         response = await self._request("POST", "/products", json_body=dict(body), idempotent=False)
         match = _CREATED_ID.search(response.text)

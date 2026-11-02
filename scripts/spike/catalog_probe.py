@@ -54,7 +54,7 @@ async def create(
         "price": 1,
         "quantity": 0,
         "hidden": 1,
-        "status": 1,
+        "status": 0,
         "sku": SKU,
         "model": SKU,
         "image": image,
