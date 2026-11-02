@@ -55,6 +55,9 @@ def _own(reg: InMemoryRegistry, pid: int) -> None:
         ("POST", "/products/5"),
         ("DELETE", "/categories/1"),
         ("GET", "/misc"),
+        ("GET", "/misc/languages"),
+        ("GET", "/categories/tree"),
+        ("POST", "/categories"),
         ("GET", "/products/1/../../orders"),
         ("GET", "/payments"),
     ],
@@ -75,9 +78,11 @@ def test_allowlist_accepts_documented_paths() -> None:
         ("PUT", "/products/970"),
         ("DELETE", "/products/970"),
         ("GET", "/categories"),
-        ("GET", "/categories/tree"),
-        ("GET", "/misc/languages"),
-        ("GET", "/misc/stock_status?x=1"),
+        ("GET", "/categories/12"),
+        ("GET", "/language_list"),
+        ("GET", "/currency_list"),
+        ("GET", "/dimension_list"),
+        ("GET", "/stock_status_list?x=1"),
     ]:
         check_allowed(method, path)
 
@@ -87,7 +92,11 @@ async def test_headers_and_reads() -> None:
     assert await client.list_products(200, 1) == {"ok": "/products/200/1"}
     assert await client.get_product(970) == {"ok": "/products/970"}
     assert await client.get_categories() == {"ok": "/categories"}
-    assert await client.get_misc("languages") == {"ok": "/misc/languages"}
+    assert await client.get_category(12) == {"ok": "/categories/12"}
+    assert await client.get_languages() == {"ok": "/language_list"}
+    assert await client.get_currencies() == {"ok": "/currency_list"}
+    assert await client.get_dimensions() == {"ok": "/dimension_list"}
+    assert await client.get_stock_statuses() == {"ok": "/stock_status_list"}
     req = rec.calls[0]
     assert req.headers["Authorization"] == f"Bearer {TOKEN}"
     assert req.headers["Company-Id"] == "1"

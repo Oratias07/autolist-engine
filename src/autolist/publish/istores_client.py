@@ -41,8 +41,13 @@ _ALLOWED: list[tuple[str, re.Pattern[str]]] = [
     ("POST", re.compile(r"/products")),
     ("PUT", re.compile(r"/products/\d+")),
     ("DELETE", re.compile(r"/products/\d+")),
-    ("GET", re.compile(r"/categories(/[A-Za-z0-9_\-]+)*")),
-    ("GET", re.compile(r"/misc(/[A-Za-z0-9_\-]+)+")),
+    ("GET", re.compile(r"/categories")),
+    ("GET", re.compile(r"/categories/\d+")),
+    # "Misc" endpoints, exact paths from apidocs.istores.co.il/api/misc (read 2026-11-02).
+    ("GET", re.compile(r"/language_list")),
+    ("GET", re.compile(r"/currency_list")),
+    ("GET", re.compile(r"/dimension_list")),
+    ("GET", re.compile(r"/stock_status_list")),
 ]
 
 
@@ -175,11 +180,23 @@ class IStoresClient:
     async def get_product(self, product_id: int) -> Any:
         return await self._get_json(f"/products/{int(product_id)}")
 
-    async def get_categories(self, subpath: str = "") -> Any:
-        return await self._get_json(f"/categories{subpath}")
+    async def get_categories(self) -> Any:
+        return await self._get_json("/categories")
 
-    async def get_misc(self, subpath: str) -> Any:
-        return await self._get_json(f"/misc/{subpath.lstrip('/')}")
+    async def get_category(self, category_id: int) -> Any:
+        return await self._get_json(f"/categories/{int(category_id)}")
+
+    async def get_languages(self) -> Any:
+        return await self._get_json("/language_list")
+
+    async def get_currencies(self) -> Any:
+        return await self._get_json("/currency_list")
+
+    async def get_dimensions(self) -> Any:
+        return await self._get_json("/dimension_list")
+
+    async def get_stock_statuses(self) -> Any:
+        return await self._get_json("/stock_status_list")
 
     # ------------------------------------------------------------------ writes
 
