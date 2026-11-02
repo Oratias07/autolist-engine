@@ -83,13 +83,18 @@ async def main() -> None:
             if page == 1:
                 first_page = data
                 _dump(raw_dir / "products_page1.json", data)
-            batch = data.get("Products") if isinstance(data, dict) else None
+            # Observed 2026-11-02: the key is "products" (apidocs say "Products"),
+            # and per_page is 100 even when 200 is requested.
+            batch = data.get("products") if isinstance(data, dict) else None
             if not isinstance(batch, list) or not batch:
                 notes.append(f"- products: stopped at page {page} (keys {sorted(data)})")
                 break
             products.extend(p for p in batch if isinstance(p, dict))
             pages = data.get("pages")
-            if isinstance(pages, int) and page >= pages:
+            if not isinstance(pages, int):
+                notes.append(f"- products: no integer 'pages' on page {page}; stopped")
+                break
+            if page >= pages:
                 break
         _dump(raw_dir / "products_all.json", products)
 
