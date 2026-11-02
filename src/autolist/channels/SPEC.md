@@ -94,3 +94,8 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 - **Fetching.** History is read with `historyTypes=messageAdded`. Headers come with `format=metadata`; bodies are not fetched in P0 (that is `mail_reader`, P3).
 - **Config added** (`store.yaml`): `secrets.gmail_oauth_client`, `channels.email.pubsub_topic`, `channels.email.pubsub_subscription`.
 - **OAuth bootstrap.** `scripts/setup/gmail_oauth_bootstrap.py` runs once in Cloud Shell. It stores the client JSON and the refresh token directly in Secret Manager, after checking that the signed-in account is the agent mailbox.
+
+## Change (2026-11-02, requested by DEV): right-to-left emails
+- Every email is `multipart/alternative`: the plain text, plus the same text as HTML with `dir` and `lang` from `store.yaml` (`channels.email.text_direction`, `channels.email.language`).
+- In the HTML part, text is escaped (no template or variable markup is passed through), and blank lines become paragraphs.
+- Reason: the first live reply (P0-08) rendered left-to-right in Gmail.

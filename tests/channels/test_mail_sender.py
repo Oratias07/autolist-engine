@@ -34,8 +34,11 @@ def test_sends_template_with_signature_to_owner(email_cfg: EmailChannelConfig) -
     parsed = email.message_from_bytes(raw)
     assert parsed["To"] == "owner@example.com" and parsed["From"] == "agent@example.com"
     assert parsed["In-Reply-To"] == "<m@example.com>"
-    text = parsed.get_payload(decode=True).decode("utf-8")
+    parts = {p.get_content_type(): p for p in parsed.walk() if not p.is_multipart()}
+    text = parts["text/plain"].get_payload(decode=True).decode("utf-8")
     assert "Example Store agent (automated)" in text
+    page = parts["text/html"].get_payload(decode=True).decode("utf-8")
+    assert 'dir="rtl"' in page and 'lang="he"' in page and "text-align:right" in page
 
 
 def test_any_other_recipient_is_refused(email_cfg: EmailChannelConfig) -> None:
@@ -61,3 +64,9 @@ def test_logs_never_contain_the_body(
     logged = " ".join(r.getMessage() + str(r.__dict__) for r in caplog.records)
     assert "31.20" not in logged and "Example Store agent" not in logged
     assert "cost_alert" in logged
+
+
+def test_html_part_escapes_variables(email_cfg: EmailChannelConfig) -> None:
+    mime = build_mime(_msg(variables={**VARS, "month_spend": "<b>1</b>"}), email_cfg, REPLIES)
+    page = next(p for p in mime.walk() if p.get_content_type() == "text/html").get_content()
+    assert "<b>1</b>" not in page and "&lt;b&gt;1&lt;/b&gt;" in page

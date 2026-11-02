@@ -66,6 +66,8 @@ class EmailChannelConfig(_Strict):
     require: EmailAuthRequirement
     pubsub_topic: str
     pubsub_subscription: str
+    text_direction: Literal["rtl", "ltr"]
+    language: str  # BCP 47 tag for the HTML part, e.g. "he"
 
 
 class ChannelsConfig(_Strict):
