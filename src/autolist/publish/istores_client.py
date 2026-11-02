@@ -77,9 +77,9 @@ def is_unhide(body: Mapping[str, Any]) -> bool:
 def visibility_problems(product: Mapping[str, Any], required_languages: list[Any]) -> list[str]:
     """Why a product read back from the store may not be shown. Fails closed.
 
-    The GET response shape is not documented by iStores; fields are read with the names of
-    the documented POST body. A field that is missing or unreadable counts as a problem,
-    so an unconfirmed shape refuses instead of guessing (confirmed in P0-05/P0-06).
+    Reads the GET /products/{id} shape observed on the live store (P0-05, 2026-11-02):
+    ``price`` (number), ``category`` (mapping of category id -> entries) and
+    ``product_description[<language_id>].name``. A missing or unreadable field is a problem.
     """
     problems: list[str] = []
     try:
@@ -88,8 +88,8 @@ def visibility_problems(product: Mapping[str, Any], required_languages: list[Any
             problems.append("price must be > 0")
     except (KeyError, InvalidOperation, ValueError):
         problems.append("price missing or unreadable")
-    categories = product.get("product_category")
-    if not isinstance(categories, list) or not categories:
+    categories = product.get("category")
+    if not isinstance(categories, Mapping) or not categories:
         problems.append("no category")
     descriptions = product.get("product_description")
     if not isinstance(descriptions, Mapping):
