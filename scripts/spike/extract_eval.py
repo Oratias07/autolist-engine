@@ -66,6 +66,15 @@ def _quote_problems(item: ExtractedItem, email: str) -> list[str]:
     return problems
 
 
+def _norm(value: Any) -> Any:
+    """None stays None, numbers compare as floats, everything else as text."""
+    if value is None:
+        return None
+    if isinstance(value, int | float | Decimal):
+        return float(value)
+    return str(value)
+
+
 def _expect_problems(result: ExtractedRequest, expect: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     if "items" in expect and len(result.items) != expect["items"]:
@@ -75,9 +84,7 @@ def _expect_problems(result: ExtractedRequest, expect: dict[str, Any]) -> list[s
             break
         for key, want in fields.items():
             got = getattr(result.items[i], key).value
-            got_n = str(got) if got is None or isinstance(got, str) else float(got)
-            want_n = want if want is None or isinstance(want, str) else float(want)
-            if got_n != want_n and not (want_n is None and got_n is None):
+            if _norm(got) != _norm(want):
                 problems.append(f"item {i + 1} {key}: expected {want!r}, got {got!r}")
     if expect.get("questions") and not result.questions:
         problems.append("expected at least one question")
