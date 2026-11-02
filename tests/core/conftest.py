@@ -54,7 +54,12 @@ VALID_STORE: dict[str, Any] = {
     "images": {
         "provider": "gemini",
         "model": None,
-        "price_per_image_usd": None,
+        "generate_size": "2K",
+        "bakeoff_candidates": ["image-model-a"],
+        "est_input_tokens_per_reference": 1000,
+        "prices": {
+            "image-model-a": {"input_usd_per_mtok": "1.00", "per_image_usd": {"2K": "0.05"}}
+        },
         "output_px": 1200,
         "variations_per_role": 2,
     },
@@ -68,14 +73,19 @@ VALID_STORE: dict[str, Any] = {
 }
 
 
+# keys whose children are free-form map entries (model ids, size labels), not required keys
+MAP_KEYS = ("images.prices",)
+
+
 def key_paths(node: Any, prefix: str = "") -> list[str]:
-    """Every mapping key path in the fixture (list elements are not keys)."""
+    """Every required key path in the fixture (list elements and map entries are not keys)."""
     paths: list[str] = []
     if isinstance(node, dict):
         for key, value in node.items():
             path = f"{prefix}.{key}" if prefix else key
             paths.append(path)
-            paths.extend(key_paths(value, path))
+            if path not in MAP_KEYS:
+                paths.extend(key_paths(value, path))
     return paths
 
 
