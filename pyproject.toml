@@ -15,6 +15,7 @@ dependencies = [
   "google-cloud-storage",
   "google-api-python-client",
   "google-auth",
+  "pillow",
 ]
 
 [dependency-groups]
@@ -54,6 +55,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# scripts/spike are thin CLIs exercised by live runs, not unit tests
 addopts = "--strict-markers --cov=autolist --cov-report=term-missing"
 markers = ["live: calls a real external service; never runs in CI"]
 asyncio_mode = "auto"

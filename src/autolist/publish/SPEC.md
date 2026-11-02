@@ -36,7 +36,8 @@ Base URL and Company ID from `store.yaml`. Headers on every request:
 | POST | `/products` | create. Body must contain `hidden: 1`, else `UnsafeCreate`. Response is text like `productID: 970`: parse with regex. If parsing fails, raise `CreateResultUnknown` (the caller then searches by SKU). Never auto-retried. |
 | PUT | `/products/{id}` | only if `id` is in the `created_products` registry, else `ForeignProductError` |
 | DELETE | `/products/{id}` | same guard. Used only by P0 cleanup and tests. |
-| GET | `/categories…`, `/misc/…` | read-only lookups (exact paths are confirmed in P0-03 and written into this table) |
+| GET | `/categories`, `/categories/{id}` | read-only (paths from apidocs, read 2026-11-02) |
+| GET | `/language_list`, `/currency_list`, `/dimension_list`, `/stock_status_list` | read-only "misc" lookups (paths from apidocs, read 2026-11-02) |
 
 `PUT /products/bulk` is **not** allowed: one write per product keeps the guard simple.
 
@@ -91,8 +92,8 @@ These record how the approved behavior was implemented. No behavior was added.
   - `GET /products/{int}/{int}` and `GET /products/{int}`
   - `POST /products`
   - `PUT /products/{int}` and `DELETE /products/{int}`
-  - `GET /categories[/…]`
-  - `GET /misc/…`
+  - `GET /categories` and `GET /categories/{int}`
+  - `GET /language_list`, `/currency_list`, `/dimension_list`, `/stock_status_list` (the "misc" group has no `/misc` prefix; corrected 2026-11-02 from the docs)
   `PUT /products/bulk`, `/orders`, `/order/…` and `/customers` are refused before any I/O.
 - **Unhide read-back.** iStores does not document the shape of `GET /products/{id}` (only `{success, product, request_id}`). The check reads `price`, `product_category` and `product_description[lang].name`, the names from the documented POST body, and **fails closed**: a missing or unreadable field refuses the unhide. The real shape is confirmed in P0-05/P0-06 and then written here. `required_name_languages: null` raises `ConfigMissing`.
 - **Retries.**
