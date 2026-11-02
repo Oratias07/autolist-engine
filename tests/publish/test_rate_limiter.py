@@ -44,7 +44,7 @@ async def test_post_timeout_is_not_retried() -> None:
 
     client, rec, reg, _ = make_client(boom)
     with pytest.raises(StoreAPIError, match="timeout"):
-        await client.create_product({"hidden": 1}, job_id="job-1")
+        await client.create_product({"hidden": 1, "status": 0}, job_id="job-1")
     assert len(rec.calls) == 1
     assert reg.get(1) is None
     await client.aclose()
@@ -53,7 +53,7 @@ async def test_post_timeout_is_not_retried() -> None:
 async def test_post_5xx_is_not_retried() -> None:
     client, rec, _, _ = make_client(lambda r: httpx.Response(502, text="bad gateway"))
     with pytest.raises(StoreAPIError):
-        await client.create_product({"hidden": 1}, job_id=None)
+        await client.create_product({"hidden": 1, "status": 0}, job_id=None)
     assert len(rec.calls) == 1
     await client.aclose()
 

@@ -33,7 +33,7 @@ Base URL and Company ID from `store.yaml`. Headers on every request:
 |---|---|---|
 | GET | `/products/{limit}/{page}` | list |
 | GET | `/products/{id}` | read |
-| POST | `/products` | create. Body must contain `hidden: 1`, else `UnsafeCreate`. Response is text like `productID: 970`: parse with regex. If parsing fails, raise `CreateResultUnknown` (the caller then searches by SKU). Never auto-retried. |
+| POST | `/products` | create. Body must contain `hidden: 1` **and `status: 0`** (amended 2026-11-02), else `UnsafeCreate`. Response is text like `productID: 970`: parse with regex. If parsing fails, raise `CreateResultUnknown` (the caller then searches by SKU). Never auto-retried. |
 | PUT | `/products/{id}` | only if `id` is in the `created_products` registry, else `ForeignProductError` |
 | DELETE | `/products/{id}` | same guard. Used only by P0 cleanup and tests. |
 | GET | `/categories`, `/categories/{id}` | read-only (paths from apidocs, read 2026-11-02) |
@@ -110,3 +110,10 @@ These record how the approved behavior was implemented. No behavior was added.
 - Images given as an external URL are copied to the iStores CDN, so a 1-hour signed URL is enough.
 - After DELETE, GET returns 404 `{"success": false, "message": "Product not found."}`.
 - Storefront pages block automated clients (403/520 from a CI runner). Verification relies on the API only.
+
+## Amendment (2026-11-02, approved by DEV in chat): create hidden **and** disabled
+- **Observed (P0-06b):** a product with `hidden: 1` is still reachable by its direct URL. With `status: 0` the same URL returns 404.
+- **Rule:**
+  - Every product is created with `hidden: 1` and `status: 0`. The client refuses any other create (`UnsafeCreate`).
+  - It stays like that, "ready", until publication.
+  - Publication sets `hidden: 0` and `status: 1` together, through the two-gate unhide check (store switch on, plus price, category and name).

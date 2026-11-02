@@ -80,7 +80,7 @@ async def main() -> None:
         "price": 1,
         "quantity": 0,
         "hidden": 1,
-        "status": 1,
+        "status": 0,
         "sku": SKU,
         "image": args.image_url,
     }

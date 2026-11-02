@@ -52,7 +52,7 @@ This repo is the **engine**. It contains no client data: no names, IDs, addresse
 - **iStores client allowlist** (`publish/istores_client.py`).
   - Allowed endpoints: products, categories and misc only. Any other path raises before a request is made. Orders, customers and payments are never called, even for reads.
   - `PUT` and `DELETE` are allowed only for product IDs in the `created_products` registry (Firestore), meaning products this system created. Anything else raises `ForeignProductError`.
-  - Every product is created with `hidden=1`. It is unhidden only by the publisher after verification, only if `price > 0`, a category and a name exist, and only while the store's publishing switch (`store.yaml` → `publishing.unhide_enabled`) is on. The switch is turned on only by an explicit instruction from the owner or the developer, recorded in decisions. No agent tool can change it.
+  - Every product is created with `hidden=1` **and `status=0`** (hidden alone is still reachable by direct URL; disabled returns 404). It is enabled and unhidden only by the publisher after verification, only if `price > 0`, a category and a name exist, and only while the store's publishing switch (`store.yaml` → `publishing.unhide_enabled`) is on. The switch is turned on only by an explicit instruction from the owner or the developer, recorded in decisions. No agent tool can change it.
   - `POST /products` is not idempotent, so it is never retried automatically. After a timeout, search by SKU first.
 - **Email.**
   - The agent uses only the dedicated mailbox named in `store.yaml`.
