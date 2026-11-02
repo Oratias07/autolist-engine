@@ -7,4 +7,3 @@
 - [ ] No client data, no real API responses, no secrets in this public repo
 - [ ] External fields used here are recorded in the store repo's field map (observed, not assumed)
 - [ ] Store repo updated in a paired PR: decisions row, open-questions, task status
-EOF

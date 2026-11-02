@@ -11,7 +11,7 @@ This repo is the **engine**. It contains no client data: no names, IDs, addresse
 3. Read the `SPEC.md` of every module the task touches.
 4. If anything in steps 1–3 contradicts something else, stop and ask. Do not pick one.
 
-## The five rules that override everything else
+## The rules that override everything else
 1. **No assumptions, no guesses.** This applies to code and to text alike.
    - If a value has no source, it is `None`, and the code path turns it into a question to the owner. It never becomes a default.
    - If an API behaves in a way that is not documented, write down what you observed (with the request and response, redacted) in the store repo's `docs/open-questions.md`. Do not build on a guess.
@@ -84,7 +84,7 @@ This repo is the **engine**. It contains no client data: no names, IDs, addresse
 ## Workflow per task
 1. Re-read the task and its acceptance criteria.
 2. Read or update the SPEC (see rule 2).
-3. Write tests first, under `tests/<module>/`. Use recorded fixtures for external APIs, with secrets redacted.
+3. Write tests first, under `tests/<module>/`. External APIs are mocked with synthetic fixtures shaped like the responses recorded in the store repo (never the real data).
 4. Implement.
 5. Run `make check` (ruff, mypy --strict, pytest, lint-imports, pip-audit). All must pass.
 6. Update docs (see rule 4). Mark the task `done` in the store repo's phase file, with a one-line note of what was verified and how.
