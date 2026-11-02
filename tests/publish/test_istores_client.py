@@ -31,8 +31,8 @@ OK = httpx.Response(200, json={"success": True})
 VISIBLE_OK = {
     "success": True,
     "product": {
-        "price": "25.00",
-        "product_category": [12],
+        "price": 25,
+        "category": {"97008": [{"category_id": 97008, "name": "Office", "language_id": 3}]},
         "product_description": {"3": {"name": "Item", "description": "<p>x</p>"}},
     },
 }
@@ -157,7 +157,7 @@ async def test_unhide_refused_while_switch_off_even_for_valid_product() -> None:
 
 
 async def test_unhide_with_switch_on_and_price_zero_is_refused() -> None:
-    bad = {"success": True, "product": {**VISIBLE_OK["product"], "price": "0.00"}}
+    bad = {"success": True, "product": {**VISIBLE_OK["product"], "price": 0}}
     config = make_config(unhide_enabled=True, enabled_by="DEV", enabled_at="2026-11-01")
     client, rec, reg, _ = make_client(lambda r: httpx.Response(200, json=bad), config=config)
     _own(reg, 970)
@@ -207,7 +207,7 @@ def test_visibility_problems_fail_closed() -> None:
         "no category",
         "product_description missing or unreadable",
     ]
-    p = {"price": "abc", "product_category": [], "product_description": {"3": {"name": " "}}}
+    p = {"price": "abc", "category": {}, "product_description": {"3": {"name": " "}}}
     assert visibility_problems(p, [3, 1]) == [
         "price missing or unreadable",
         "no category",

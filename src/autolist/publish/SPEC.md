@@ -95,7 +95,9 @@ These record how the approved behavior was implemented. No behavior was added.
   - `GET /categories` and `GET /categories/{int}`
   - `GET /language_list`, `/currency_list`, `/dimension_list`, `/stock_status_list` (the "misc" group has no `/misc` prefix; corrected 2026-11-02 from the docs)
   `PUT /products/bulk`, `/orders`, `/order/…` and `/customers` are refused before any I/O.
-- **Unhide read-back.** iStores does not document the shape of `GET /products/{id}` (only `{success, product, request_id}`). The check reads `price`, `product_category` and `product_description[lang].name`, the names from the documented POST body, and **fails closed**: a missing or unreadable field refuses the unhide. The real shape is confirmed in P0-05/P0-06 and then written here. `required_name_languages: null` raises `ConfigMissing`.
+- **Unhide read-back.** The shape of `GET /products/{id}` was confirmed on the live store in P0-05 (2026-11-02). It differs from the POST body: categories come back as `category` (a mapping from category id to entries), not `product_category`; `price` is a number; names are at `product_description[<language_id>].name`.
+  - The check reads exactly these fields and still **fails closed** when any of them is missing or unreadable.
+  - `required_name_languages` comes from `store.yaml`. A `null` value raises `ConfigMissing`.
 - **Retries.**
   - A 429 means the request was rejected, so it is retried for every method, POST included, at most 3 times.
   - Timeouts and 5xx are retried only for GET and PUT.
