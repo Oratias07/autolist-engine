@@ -12,8 +12,6 @@ Writes a report to OUT. Never logs message bodies or tokens.
 from __future__ import annotations
 
 import argparse
-import base64
-import json
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -73,28 +71,34 @@ def main() -> None:
     session = AuthorizedSession(creds)  # type: ignore[no-untyped-call]
     _pull(session, sub)  # drop anything older than this run
     started = time.monotonic()
-    push_at: float | None = None
-    while time.monotonic() - started < args.wait_minutes * 60:
-        msgs = _pull(session, sub)
-        if msgs:
-            push_at = time.monotonic() - started
-            data = json.loads(base64.b64decode(msgs[0]["message"]["data"]))
-            lines.append(f"- push received after {push_at:.0f}s for {data.get('emailAddress')}")
-            break
-        time.sleep(10)
-    if push_at is None:
-        lines.append(f"- no push within {args.wait_minutes} min")
-
-    ids, latest = new_message_ids(service, watch["historyId"])
-    lines.append(f"- history since watch: {len(ids)} new message(s), latest historyId {latest}")
+    pushes = 0
     reply_to: tuple[str, str] | None = None
-    for mid in ids:
-        headers, thread = message_headers(service, mid)
-        verdict = verify_sender(headers, email_cfg)
-        lines.append(f"  - {mid}: accepted={verdict.accepted} ({verdict.reason})")
-        if verdict.accepted and reply_to is None:
-            msg_id = next((v for n, v in headers if n.lower() == "message-id"), "")
-            reply_to = (thread, msg_id)
+    seen: set[str] = set()
+    # Any mailbox change triggers a push (labels, our own sends), so keep waiting until a
+    # newly added message from an accepted sender shows up in history, or until timeout.
+    while reply_to is None and time.monotonic() - started < args.wait_minutes * 60:
+        if not _pull(session, sub):
+            time.sleep(10)
+            continue
+        pushes += 1
+        ids, _ = new_message_ids(service, watch["historyId"])
+        for mid in ids:
+            if mid in seen:
+                continue
+            seen.add(mid)
+            headers, thread = message_headers(service, mid)
+            verdict = verify_sender(headers, email_cfg)
+            waited = time.monotonic() - started
+            lines.append(
+                f"- push #{pushes} after {waited:.0f}s: message {mid} "
+                f"accepted={verdict.accepted} ({verdict.reason})"
+            )
+            if verdict.accepted and reply_to is None:
+                msg_id = next((v for n, v in headers if n.lower() == "message-id"), "")
+                reply_to = (thread, msg_id)
+    lines.append(f"- pushes received: {pushes}; new messages seen: {len(seen)}")
+    if reply_to is None:
+        lines.append(f"- no accepted message within {args.wait_minutes} min")
 
     if reply_to is not None:
         test = OutboundMessage(
