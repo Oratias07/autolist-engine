@@ -76,7 +76,7 @@ One HTTPS call per attempt to the provider. Cost ledger entries.
 These record how the approved behavior was implemented.
 - **Files.** `errors.py` holds `PromptVariableError`, `PromptMissing` (file absent, no front matter, `status: not-written`, or empty body), `LLMOutputInvalid` and `LLMUnavailable`.
 - **No prompt text in Python.** The JSON-only instruction and the repair message are store-repo prompts: `agent/prompts/system_json_output.md` (variable `schema`) and `system_json_repair.md` (variable `error`). Every store repo must have them.
-- **Prices.** `store.yaml` → `llm.prices` has the shape `{<model_id>: {input_usd_per_mtok, output_usd_per_mtok}}`. The values are copied from the official price page, with the date, at P0-07 live.
+- **Prices.** `store.yaml` → `llm.prices` has the shape `{<model_id>: {input_usd_per_mtok, output_usd_per_mtok, long_context?: {above_input_tokens, input_usd_per_mtok, output_usd_per_mtok}}}`. `long_context` mirrors tiered prices published on the price page (e.g. a higher rate for prompts above 100K tokens), and the tier is picked by input tokens. The estimate uses bytes, so near the threshold it picks the higher tier, which is conservative. The values are copied from the official price page, with the date, at P0-07 live.
   - A missing table raises `ConfigMissing`. A model without a price, or an unreadable price, raises `ConfigInvalid`.
   - Either way, the error comes before any request.
 - **Estimate.** Before each call (and before the repair call), the input is estimated at its UTF-8 byte count, which is never less than its token count, plus the full `max_output_tokens`. That is conservative.
