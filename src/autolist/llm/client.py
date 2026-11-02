@@ -60,11 +60,23 @@ class LLMClient(Protocol):
     def complete(self, req: LLMRequest) -> LLMResult: ...
 
 
+class _LongContextPrices(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    above_input_tokens: int = Field(gt=0)
+    input_usd_per_mtok: Decimal = Field(ge=0)
+    output_usd_per_mtok: Decimal = Field(ge=0)
+
+
 class _Prices(BaseModel):
+    """Per-model prices from store.yaml. ``long_context`` covers tiered models whose
+    price changes above an input-token threshold (as published on the price page)."""
+
     model_config = ConfigDict(extra="forbid")
 
     input_usd_per_mtok: Decimal = Field(ge=0)
     output_usd_per_mtok: Decimal = Field(ge=0)
+    long_context: _LongContextPrices | None = None
 
 
 def _prices_for(config: StoreConfig, model: str) -> _Prices:
@@ -79,9 +91,11 @@ def _prices_for(config: StoreConfig, model: str) -> _Prices:
 
 def _usd(prices: _Prices, input_tokens: int, output_tokens: int) -> Decimal:
     mtok = Decimal(1_000_000)
-    return (
-        prices.input_usd_per_mtok * input_tokens + prices.output_usd_per_mtok * output_tokens
-    ) / mtok
+    rate_in, rate_out = prices.input_usd_per_mtok, prices.output_usd_per_mtok
+    tier = prices.long_context
+    if tier is not None and input_tokens > tier.above_input_tokens:
+        rate_in, rate_out = tier.input_usd_per_mtok, tier.output_usd_per_mtok
+    return (rate_in * input_tokens + rate_out * output_tokens) / mtok
 
 
 JSON_OUTPUT_PROMPT = "system_json_output"

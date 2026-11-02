@@ -232,3 +232,23 @@ def test_retry_after_unparsable_falls_back_to_backoff(tmp_path: Path) -> None:
     h = Harness(tmp_path, lambda r: replies.pop(0))
     h.client.complete(_req(output_schema=None))
     assert h.sleeps == [1.0]
+
+
+def test_long_context_tier_applies_above_threshold(tmp_path: Path) -> None:
+    tiered = {
+        MODEL: {
+            "input_usd_per_mtok": "0.10",
+            "output_usd_per_mtok": "0.50",
+            "long_context": {
+                "above_input_tokens": 100000,
+                "input_usd_per_mtok": "0.50",
+                "output_usd_per_mtok": "2.50",
+            },
+        }
+    }
+    replies = [_ok("short", tin=1000, tout=100), _ok("long", tin=200000, tout=100)]
+    h = Harness(tmp_path, lambda r: replies.pop(0), config=_config(prices=tiered))
+    short = h.client.complete(_req(output_schema=None))
+    long = h.client.complete(_req(output_schema=None))
+    assert short.usd == Decimal("0.00015")  # 1000*0.10/1e6 + 100*0.50/1e6
+    assert long.usd == Decimal("0.10025")  # 200000*0.50/1e6 + 100*2.50/1e6
