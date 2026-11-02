@@ -103,3 +103,10 @@ These record how the approved behavior was implemented. No behavior was added.
   - Timeouts and 5xx are retried only for GET and PUT.
   - POST and DELETE are never retried on them.
 - **Logging.** One structured line per call: method, path, status, and a response excerpt of up to 2 KB. The token is registered with the redaction filter when the client is constructed.
+
+## Observed behaviour relevant to publisher/verifier (P0-06, 2026-11-02)
+- POST response contains `productID: <id>`, parsed with the regex in `istores_client`.
+- PUT is a partial update: fields not sent are kept. The publisher still re-sends `hidden: 1` on every pre-publish PUT.
+- Images given as an external URL are copied to the iStores CDN, so a 1-hour signed URL is enough.
+- After DELETE, GET returns 404 `{"success": false, "message": "Product not found."}`.
+- Storefront pages block automated clients (403/520 from a CI runner). Verification relies on the API only.

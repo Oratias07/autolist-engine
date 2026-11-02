@@ -5,8 +5,8 @@ You are implementing **autolist**, an email-driven agent that turns a store owne
 This repo is the **engine**. It contains no client data: no names, IDs, addresses or texts of any store. Each client has a separate **store repo** with the playbook, agent texts, docs and `store.yaml`. Its local path is in `AUTOLIST_STORE_DIR` (in development, a sibling checkout such as `../<store-repo>`).
 
 ## Session start (every session)
-1. Read `$AUTOLIST_STORE_DIR/CLAUDE.md`, then `$AUTOLIST_STORE_DIR/docs/decisions.md` (newest first) and `$AUTOLIST_STORE_DIR/docs/open-questions.md`.
-   - Launch with `claude --add-dir $AUTOLIST_STORE_DIR` so both repos are writable.
+1. Read `$AUTOLIST_STORE_DIR/CLAUDE.md`, then `$AUTOLIST_STORE_DIR/docs/decisions.md` (newest first), `$AUTOLIST_STORE_DIR/docs/open-questions.md` and `$AUTOLIST_STORE_DIR/docs/lessons.md`.
+   - Both repos must be writable in the session: sibling checkouts, or `claude --add-dir $AUTOLIST_STORE_DIR` locally.
 2. Read `$AUTOLIST_STORE_DIR/tasks/phase-<N>.md` (the current phase). Find the first task whose status is not `done`. Tasks live in the store repo because they belong to a client project. The engine stays generic.
 3. Read the `SPEC.md` of every module the task touches.
 4. If anything in steps 1–3 contradicts something else, stop and ask. Do not pick one.
@@ -35,6 +35,9 @@ This repo is the **engine**. It contains no client data: no names, IDs, addresse
    - `open-questions.md`, if a question was opened or closed
    An undocumented change is not done.
 5. **Security rules are not negotiable** (next section). If a task seems to require breaking one, stop and ask.
+6. **Observed beats documented.** An external API field is used only after it was seen in a real response and recorded in the store repo's field map (`docs/istores-field-map.md` for iStores).
+   - Until then, code fails closed: it refuses, it does not guess.
+   - A mismatch with the vendor docs updates the SPEC, the field map and the tests in the same PR.
 
 ## Security rules
 - **Secrets.**
@@ -63,6 +66,20 @@ This repo is the **engine**. It contains no client data: no names, IDs, addresse
   - Every paid call goes through `core/cost_ledger.py`. A call that would exceed the per-job cap or the monthly cap (both in `store.yaml`) is refused before it is made.
   - Owner alerts fire at the thresholds in `store.yaml`. At the monthly cap all paid calls stop.
 - **Never** run anything against the live store that is not in the current task's acceptance criteria. Never unhide, edit or delete a product the system did not create.
+
+## Client data and the public engine
+- This repo is public. It never contains client data: names, ids, addresses, store texts, or real API responses.
+- Tests use generic values (`example.com`, `company_id: 1`).
+- Real responses, fixtures and reports live in the store repo (`fixtures/`, `docs/live-runs/`).
+- Commits use the GitHub no-reply address.
+
+## Live runs
+- Anything that calls the real store or a paid API runs only through the store repo's `live` workflow. It is manual, from `main` only, and authenticates with WIF, so no key is stored anywhere.
+- The dev session never holds secret values. Live code lives in `scripts/spike/` (phase 0) or in modules, and is invoked by that workflow.
+- A run that **writes** to the store needs DEV approval in chat for that exact run.
+  - Undocumented-field experiments go in a separate request after a documented create.
+  - Cleanup (delete) always runs, in `finally`.
+- The workflow pushes results to a `live/<run>` branch. Claude opens the PR (Actions cannot).
 
 ## Workflow per task
 1. Re-read the task and its acceptance criteria.

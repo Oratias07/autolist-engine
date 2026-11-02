@@ -32,3 +32,9 @@ TBD.
 
 ## Acceptance criteria
 Taken from the phase file in the store repo, then refined here.
+
+## Known constraints (from live discovery, 2026-11-02)
+- **Write explicitly.** Products created through the API get catalog flags off (`fb_feed`, `google_feed`, `tiktok_feed`, `zap` = 0). Anything the playbook wants on must be sent explicitly. Whether the flags are writable is being checked in P0-06b.
+- **Related products:** the field the owner uses is `product_upsale` (list of product ids, writable).
+- **Google product category:** `feed_category`. A string was not stored; the integer form is tested in P0-06b.
+- **Language:** names and descriptions go under `product_description["3"]` (Hebrew, the only language used in the catalog).

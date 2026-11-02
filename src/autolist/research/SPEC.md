@@ -32,3 +32,8 @@ TBD.
 
 ## Acceptance criteria
 Taken from the phase file in the store repo, then refined here.
+
+## Known constraints (from live discovery, 2026-11-02)
+- **Store SKUs can be meaningless.** iStores fills an empty SKU with a 32-hex value (155 of 573 products). Duplicate check: ignore SKUs matching `^[0-9a-f]{32}$`. Compare on real SKU, UPC/barcode (rarely filled: 7 of 573) and normalized name.
+- **Model** is auto-filled (slug or hash) when empty, so it is not an identity signal.
+- Catalog list: `GET /products/{limit}/{page}`, key `products`, 100 per page. Fields per item are in the store repo's field map.
