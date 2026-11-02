@@ -44,8 +44,8 @@ class LLMClient(Protocol):
   - A second failure raises `LLMOutputInvalid`, keeping the raw text for the job log.
 - **No tool use.** Extraction and classification calls get no tools.
 - **Cost.**
-- `CostEntry(category="llm")` recorded after every call, with actual usage.
-  - After the call: `record()`, with real token counts and prices from `store.yaml` (`llm.prices`).
+  - Before the call: `cost_ledger.authorize()`, with an estimate from the input length and `max_output_tokens`.
+  - After the call: `record()` with `category="llm"`, real token counts and prices from `store.yaml` (`llm.prices`).
   - Refused authorization raises `CostCapExceeded`, and no request is sent.
 - **Retries.** 429, 529 and 5xx get exponential backoff, at most 3 tries, honoring `retry-after`. Other 4xx errors are not retried.
 - **Model ids** come from `store.yaml` (`llm.models.extract|write|classify`). There are no hard-coded ids and no fallback model.
