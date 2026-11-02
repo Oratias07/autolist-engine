@@ -4,6 +4,7 @@ status: approved
 approved_by: DEV (Or)
 approved_at: 2026-10-30
 amendment_approved: 2026-10-30   # alert outbox, approved by DEV (Or) via PR #3
+amendment_proposed: 2026-11-02   # P0-09 cap event, cost category, month summary - awaiting DEV approval
 phase: 0 (parts marked P0), rest in later phases
 ---
 
@@ -126,3 +127,36 @@ These record how the approved behavior was implemented. No behavior was added.
 ## Additions (2026-11-02, P0-08)
 - `models.py`: channel models (`ChannelMessage`, `OutboundMessage` with `in_reply_to`, `Attachment`, `HealthStatus`). They moved here from `channels/base.py` per CLAUDE.md rule 3.
 - `StoreConfig`: `secrets.gmail_oauth_client`, `channels.email.pubsub_topic`, `channels.email.pubsub_subscription`. These are required keys.
+
+## Amendment (2026-11-02, **proposed**): cap event, cost category, month summary (P0-09)
+**Problem.** P0-09 needs three things the ledger does not give today:
+- an event when the monthly cap is reached
+- spend split into text, images and search (the `cost_alert` template asks for it)
+- one place that computes the numbers, so the orchestrator holds no cost arithmetic
+
+**Change.**
+1. **`CostCapReached(kind="cap", month, month_spend, monthly_cap)`.**
+   - `record()` emits it once per month, the first time month spend is `>= monthly_cap`.
+   - It goes into the same outbox.
+   - `CostThresholdCrossed` gains `kind="threshold"`, and the outbox becomes a list of the union, discriminated by `kind`.
+2. **`authorize()` refuses every call once month spend `>= monthly_cap`**, even a call with a zero estimate. Today it refuses only when `spend + estimate > cap`, so at exactly 60.00 a zero-estimate call would pass. This matches "at the monthly cap all paid calls stop".
+3. **`CostEntry.category: Literal["llm", "image", "search"]`**, required, with no default.
+   - The caller that knows what it paid for sets it. For example, `llm.client` sets `"llm"`.
+   - This touches one core model plus the one place that builds it (`llm/client.py`).
+   - The archived P0-07 `ledger.json` in the store repo stays as recorded. It is a report, and nothing loads it.
+4. **`month_summary(at) -> CostSummary`** (read-only), with these fields:
+   - `month`
+   - `month_spend`
+   - `by_category` (all three keys, 0 when none)
+   - `jobs_count` (distinct non-null `job_id`)
+   - `monthly_cap`
+   - `next_threshold` (the next threshold above spend, else `monthly_cap`)
+   - `reset_date` (first day of next month in `store.timezone`)
+5. **`requeue_alerts(events)`** puts events back at the front of the outbox. The orchestrator calls it when a send fails.
+
+**Acceptance.**
+- Crossing the cap emits exactly one `CostCapReached` per month.
+- `authorize()` at spend == cap refuses, even with estimate 0.
+- `month_summary` on seeded entries returns the expected split, `next_threshold` (30.10 → 40, 50.10 → 60) and `reset_date` (2026-11-15 → 2026-12-01; 2026-12-31 23:30 Israel time → 2027-01-01).
+- A `CostEntry` without `category` is rejected.
+- Requeued events come out of the next drain first.
