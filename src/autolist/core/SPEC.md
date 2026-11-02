@@ -4,7 +4,7 @@ status: approved
 approved_by: DEV (Or)
 approved_at: 2026-10-30
 amendment_approved: 2026-10-30   # alert outbox, approved by DEV (Or) via PR #3
-amendment_proposed: 2026-11-02   # P0-09 cap event, cost category, month summary - awaiting DEV approval
+amendment_approved_2: 2026-11-02   # P0-09 cap event, cost category, month summary - approved by DEV (Or), PR #19 + chat
 phase: 0 (parts marked P0), rest in later phases
 ---
 
@@ -128,7 +128,7 @@ These record how the approved behavior was implemented. No behavior was added.
 - `models.py`: channel models (`ChannelMessage`, `OutboundMessage` with `in_reply_to`, `Attachment`, `HealthStatus`). They moved here from `channels/base.py` per CLAUDE.md rule 3.
 - `StoreConfig`: `secrets.gmail_oauth_client`, `channels.email.pubsub_topic`, `channels.email.pubsub_subscription`. These are required keys.
 
-## Amendment (2026-11-02, **proposed**): cap event, cost category, month summary (P0-09)
+## Amendment (2026-11-02, approved): cap event, cost category, month summary (P0-09)
 **Problem.** P0-09 needs three things the ledger does not give today:
 - an event when the monthly cap is reached
 - spend split into text, images and search (the `cost_alert` template asks for it)

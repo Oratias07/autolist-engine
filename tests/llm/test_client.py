@@ -99,6 +99,7 @@ class Harness:
                     at=datetime.now(UTC),
                     job_id=None,
                     provider="seed",
+                    category="llm",
                     operation="seed",
                     units=0,
                     unit="usd",

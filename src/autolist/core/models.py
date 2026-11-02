@@ -7,10 +7,10 @@ needs the value calls ``StoreConfig.require`` which raises ``ConfigMissing``.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -190,10 +190,14 @@ class SourcedValue[T](BaseModel):
 # ---------------------------------------------------------------- costs
 
 
+CostCategory = Literal["llm", "image", "search"]
+
+
 class CostEntry(_Strict):
     at: datetime
     job_id: str | None
     provider: str
+    category: CostCategory  # set by the caller that knows what it paid for; no default
     operation: str
     units: float = Field(ge=0)
     unit: str
@@ -215,10 +219,35 @@ class CostDecision(_Strict):
 class CostThresholdCrossed(_Strict):
     """Monthly spend crossed an alert threshold. Emitted once per threshold per month."""
 
+    kind: Literal["threshold"] = "threshold"
     month: str
     threshold: Decimal
     month_spend: Decimal
     monthly_cap: Decimal
+
+
+class CostCapReached(_Strict):
+    """Monthly spend reached the monthly cap. Emitted once per month; paid calls stop."""
+
+    kind: Literal["cap"] = "cap"
+    month: str
+    month_spend: Decimal
+    monthly_cap: Decimal
+
+
+CostAlert = Annotated[CostThresholdCrossed | CostCapReached, Field(discriminator="kind")]
+
+
+class CostSummary(_Strict):
+    """Read-only month figures for owner emails. Every number comes from recorded entries."""
+
+    month: str
+    month_spend: Decimal
+    by_category: dict[CostCategory, Decimal]
+    jobs_count: int
+    monthly_cap: Decimal
+    next_threshold: Decimal  # next alert threshold above spend; monthly_cap when none is left
+    reset_date: date  # first day of next month, store timezone
 
 
 # ---------------------------------------------------------------- jobs (skeleton)
