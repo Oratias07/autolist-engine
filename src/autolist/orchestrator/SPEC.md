@@ -1,7 +1,8 @@
 ---
 module: orchestrator
-status: proposed         # P0-09 skeleton only (cost-alert delivery); the rest is written at the start of phase 1
-proposed_at: 2026-11-02
+status: approved         # P0-09 skeleton only (cost-alert delivery); the rest is written and approved at the start of phase 1
+approved_by: DEV (Or)
+approved_at: 2026-11-02  # PR #19 + chat, including the 4 decisions listed there
 phase: 0 (P0-09 skeleton), 1 (everything else)
 ---
 
@@ -19,7 +20,7 @@ The only package allowed to import feature modules. It wires them together: it r
 ## Inputs (P0-09)
 `deliver_cost_alerts(ledger, channel, owner, open_jobs, now) -> list[str]`
 - `ledger`: `core.cost_ledger.CostLedger`.
-- `channel`: anything implementing `channels.base.Channel`.
+- `channel`: anything with `send(OutboundMessage) -> str` (a local `Sender` protocol; every `channels.base.Channel` satisfies it, and so does the send-only `GmailSender`).
 - `owner`: the owner's address, from `store.yaml` (the allowlisted sender). Never a literal.
 - `open_jobs`: an `OpenJobsCounter` protocol (`count() -> int`). Phase 0 has no job runner. Its implementation is `NoJobsYet`, which returns 0 because no job can exist yet. In phase 1 it is replaced by the job store.
 - `now`: aware datetime (injectable for tests).

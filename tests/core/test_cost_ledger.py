@@ -15,7 +15,7 @@ from autolist.core.cost_ledger import (
     LedgerState,
 )
 from autolist.core.errors import CostCapExceeded
-from autolist.core.models import CostEntry
+from autolist.core.models import CostCapReached, CostEntry, CostThresholdCrossed
 
 
 class Clock:
@@ -31,6 +31,7 @@ def _entry(usd: str, at: datetime, job_id: str | None = "job-1") -> CostEntry:
         at=at,
         job_id=job_id,
         provider="anthropic",
+        category="llm",
         operation="extract",
         units=1000,
         unit="tokens",
@@ -136,5 +137,146 @@ def test_alerts_are_kept_in_an_outbox_until_drained(ledger_parts: tuple[CostLedg
     ledger.record(_entry("31.00", clock.now, job_id=None))
     ledger.record(_entry("10.00", clock.now, job_id=None))
     drained = ledger.drain_alerts()
-    assert [e.threshold for e in drained] == [Decimal(30), Decimal(40)]
+    assert [e.threshold for e in drained if isinstance(e, CostThresholdCrossed)] == [
+        Decimal(30),
+        Decimal(40),
+    ]
     assert ledger.drain_alerts() == []
+
+
+# ---------------------------------------------------------------- P0-09 amendment
+
+
+def _cat_entry(usd: str, at: datetime, category: str, job_id: str | None) -> CostEntry:
+    return CostEntry.model_validate(
+        {
+            "at": at,
+            "job_id": job_id,
+            "provider": "p",
+            "category": category,
+            "operation": "op",
+            "units": 1,
+            "unit": "call",
+            "usd": usd,
+            "estimated": False,
+        }
+    )
+
+
+def test_cost_entry_requires_category() -> None:
+    with pytest.raises(ValueError, match="category"):
+        CostEntry.model_validate(
+            {
+                "at": datetime(2026, 11, 2, tzinfo=UTC),
+                "job_id": None,
+                "provider": "anthropic",
+                "operation": "x",
+                "units": 1,
+                "unit": "tokens",
+                "usd": "0.1",
+                "estimated": False,
+            }
+        )
+
+
+def test_cap_event_emitted_once_per_month(ledger_parts: tuple[CostLedger, Clock]) -> None:
+    ledger, clock = ledger_parts
+    events = ledger.record(_entry("60.00", clock.now, job_id=None))
+    caps = [e for e in events if isinstance(e, CostCapReached)]
+    assert len(caps) == 1
+    assert caps[0].month_spend == Decimal(60)
+    assert caps[0].monthly_cap == Decimal(60)
+    assert ledger.record(_entry("0.50", clock.now, job_id=None)) == []
+    drained = ledger.drain_alerts()
+    assert [e.kind for e in drained] == ["threshold", "threshold", "threshold", "cap"]
+
+
+def test_authorize_refuses_at_cap_even_with_zero_estimate(
+    ledger_parts: tuple[CostLedger, Clock],
+) -> None:
+    ledger, clock = ledger_parts
+    ledger.record(_entry("60.00", clock.now, job_id=None))
+    assert not ledger.authorize(None, "anthropic", "extract", Decimal(0)).allowed
+
+
+def test_authorize_just_below_cap_with_zero_estimate(
+    ledger_parts: tuple[CostLedger, Clock],
+) -> None:
+    ledger, clock = ledger_parts
+    ledger.record(_entry("59.99", clock.now, job_id=None))
+    assert ledger.authorize(None, "anthropic", "extract", Decimal(0)).allowed
+    assert not ledger.authorize(None, "anthropic", "extract", Decimal("0.02")).allowed
+
+
+def test_month_summary_split_jobs_and_next_threshold(
+    ledger_parts: tuple[CostLedger, Clock],
+) -> None:
+    ledger, _ = ledger_parts
+    now = datetime(2026, 11, 15, 10, tzinfo=UTC)
+    ledger.record(_cat_entry("20.00", now, "llm", "job-1"))
+    ledger.record(_cat_entry("9.90", now, "image", "job-2"))
+    ledger.record(_cat_entry("0.20", now, "search", "job-1"))
+    ledger.record(_cat_entry("5.00", datetime(2026, 10, 20, tzinfo=UTC), "llm", "job-9"))
+    s = ledger.month_summary(now)
+    assert s.month == "2026-11"
+    assert s.month_spend == Decimal("30.10")
+    assert s.by_category == {
+        "llm": Decimal(20),
+        "image": Decimal("9.90"),
+        "search": Decimal("0.20"),
+    }
+    assert s.jobs_count == 2
+    assert s.next_threshold == Decimal(40)
+    assert s.monthly_cap == Decimal(60)
+    assert str(s.reset_date) == "2026-12-01"
+
+
+def test_month_summary_empty_categories_and_after_last_threshold(
+    ledger_parts: tuple[CostLedger, Clock],
+) -> None:
+    ledger, _ = ledger_parts
+    now = datetime(2026, 11, 15, tzinfo=UTC)
+    ledger.record(_cat_entry("50.10", now, "llm", None))
+    s = ledger.month_summary(now)
+    assert s.by_category["image"] == Decimal(0)
+    assert s.by_category["search"] == Decimal(0)
+    assert s.jobs_count == 0
+    assert s.next_threshold == Decimal(60)
+
+
+def test_month_summary_reset_date_uses_store_timezone(
+    ledger_parts: tuple[CostLedger, Clock],
+) -> None:
+    ledger, _ = ledger_parts
+    # 2026-12-31 23:30 in Israel = 21:30 UTC
+    s = ledger.month_summary(datetime(2026, 12, 31, 21, 30, tzinfo=UTC))
+    assert s.month == "2026-12"
+    assert str(s.reset_date) == "2027-01-01"
+    # 2026-12-31 22:30 UTC is already January in Israel
+    assert ledger.month_summary(datetime(2026, 12, 31, 22, 30, tzinfo=UTC)).month == "2027-01"
+
+
+def test_requeued_alerts_come_out_first(ledger_parts: tuple[CostLedger, Clock]) -> None:
+    ledger, clock = ledger_parts
+    ledger.record(_entry("31.00", clock.now, job_id=None))
+    first = ledger.drain_alerts()
+    ledger.record(_entry("10.00", clock.now, job_id=None))
+    ledger.requeue_alerts(first)
+    drained = ledger.drain_alerts()
+    assert [e.threshold for e in drained if isinstance(e, CostThresholdCrossed)] == [
+        Decimal(30),
+        Decimal(40),
+    ]
+    ledger.requeue_alerts([])
+    assert ledger.drain_alerts() == []
+
+
+def test_json_store_roundtrips_cap_event(tmp_path: Path, store_data: dict[str, Any]) -> None:
+    cfg = parse_store_config(store_data)
+    path = tmp_path / "costs.json"
+    clock = Clock(datetime(2026, 11, 2, tzinfo=UTC))
+    CostLedger(cfg.costs, cfg.store.timezone, JsonFileLedgerStore(path), clock).record(
+        _entry("60", clock.now, job_id=None)
+    )
+    reopened = CostLedger(cfg.costs, cfg.store.timezone, JsonFileLedgerStore(path), clock)
+    assert [e.kind for e in reopened.drain_alerts()][-1] == "cap"

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Protocol
@@ -18,7 +18,18 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field
 
 from autolist.core.errors import CostCapExceeded
-from autolist.core.models import CostDecision, CostEntry, CostsConfig, CostThresholdCrossed
+from autolist.core.models import (
+    CostAlert,
+    CostCapReached,
+    CostCategory,
+    CostDecision,
+    CostEntry,
+    CostsConfig,
+    CostSummary,
+    CostThresholdCrossed,
+)
+
+_CATEGORIES: tuple[CostCategory, ...] = ("llm", "image", "search")
 
 
 class LedgerState(BaseModel):
@@ -27,7 +38,8 @@ class LedgerState(BaseModel):
     month_totals: dict[str, Decimal] = Field(default_factory=dict)
     job_totals: dict[str, Decimal] = Field(default_factory=dict)
     alerts_sent: dict[str, list[Decimal]] = Field(default_factory=dict)
-    pending_alerts: list[CostThresholdCrossed] = Field(default_factory=list)
+    cap_reached: list[str] = Field(default_factory=list)  # months whose cap event was emitted
+    pending_alerts: list[CostAlert] = Field(default_factory=list)
     entries: list[CostEntry] = Field(default_factory=list)
 
 
@@ -103,7 +115,11 @@ class CostLedger:
         state = self._store.load()
         month = self.month_key(self._clock())
         month_total = state.month_totals.get(month, Decimal(0))
-        if month_total + est_usd > self._costs.monthly_cap:
+        # at the cap every paid call stops, even one with a zero estimate
+        if (
+            month_total >= self._costs.monthly_cap
+            or month_total + est_usd > self._costs.monthly_cap
+        ):
             return CostDecision(
                 allowed=False,
                 reason=(
@@ -135,8 +151,8 @@ class CostLedger:
         if not decision.allowed:
             raise CostCapExceeded(decision.reason)
 
-    def record(self, entry: CostEntry) -> list[CostThresholdCrossed]:
-        """Record a spend and return the threshold events it newly triggered."""
+    def record(self, entry: CostEntry) -> list[CostAlert]:
+        """Record a spend and return the alert events it newly triggered."""
         with self._lock:
             state = self._store.load()
             month = self.month_key(entry.at)
@@ -148,7 +164,7 @@ class CostLedger:
                 )
             state.entries.append(entry)
             sent = state.alerts_sent.setdefault(month, [])
-            events: list[CostThresholdCrossed] = []
+            events: list[CostAlert] = []
             for threshold in self._costs.alert_thresholds:
                 if new_total >= threshold and threshold not in sent:
                     sent.append(threshold)
@@ -160,12 +176,19 @@ class CostLedger:
                             monthly_cap=self._costs.monthly_cap,
                         )
                     )
+            if new_total >= self._costs.monthly_cap and month not in state.cap_reached:
+                state.cap_reached.append(month)
+                events.append(
+                    CostCapReached(
+                        month=month, month_spend=new_total, monthly_cap=self._costs.monthly_cap
+                    )
+                )
             state.pending_alerts.extend(events)
             self._store.save(state)
             return events
 
-    def drain_alerts(self) -> list[CostThresholdCrossed]:
-        """Return and clear threshold events not yet delivered (the orchestrator's outbox).
+    def drain_alerts(self) -> list[CostAlert]:
+        """Return and clear alert events not yet delivered (the orchestrator's outbox).
 
         Callers deep inside modules (llm, images) record costs but do not send anything, so
         events are kept here until the orchestrator drains them and passes them to channels.
@@ -176,3 +199,42 @@ class CostLedger:
             state.pending_alerts.clear()
             self._store.save(state)
             return events
+
+    def requeue_alerts(self, events: list[CostAlert]) -> None:
+        """Put undelivered events back at the front of the outbox (a send failed)."""
+        if not events:
+            return
+        with self._lock:
+            state = self._store.load()
+            state.pending_alerts = [*events, *state.pending_alerts]
+            self._store.save(state)
+
+    def month_summary(self, at: datetime) -> CostSummary:
+        """Figures for the month containing ``at`` (store timezone), from recorded entries."""
+        month = self.month_key(at)
+        state = self._store.load()
+        by_category: dict[CostCategory, Decimal] = dict.fromkeys(_CATEGORIES, Decimal(0))
+        jobs: set[str] = set()
+        for entry in state.entries:
+            if self.month_key(entry.at) != month:
+                continue
+            by_category[entry.category] += entry.usd
+            if entry.job_id is not None:
+                jobs.add(entry.job_id)
+        spend = state.month_totals.get(month, Decimal(0))
+        above = [t for t in sorted(self._costs.alert_thresholds) if t > spend]
+        local = at.astimezone(self._tz)
+        reset = (
+            date(local.year + 1, 1, 1)
+            if local.month == 12
+            else date(local.year, local.month + 1, 1)
+        )
+        return CostSummary(
+            month=month,
+            month_spend=spend,
+            by_category=by_category,
+            jobs_count=len(jobs),
+            monthly_cap=self._costs.monthly_cap,
+            next_threshold=above[0] if above else self._costs.monthly_cap,
+            reset_date=reset,
+        )

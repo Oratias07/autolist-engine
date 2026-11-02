@@ -236,6 +236,7 @@ class AnthropicClient:
                     at=self._now(),
                     job_id=req.job_id,
                     provider="anthropic",
+                    category="llm",
                     operation=req.prompt,
                     units=float(used_in + used_out),
                     unit="tokens",
