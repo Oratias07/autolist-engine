@@ -50,6 +50,7 @@ class SecretsConfig(_Strict):
     istores_token: str
     anthropic_api_key: str
     gemini_api_key: str
+    gmail_oauth_client: str
     gmail_refresh_token: str
 
 
@@ -63,6 +64,8 @@ class EmailChannelConfig(_Strict):
     owner_address: str
     allowed_senders: list[str] = Field(min_length=1)
     require: EmailAuthRequirement
+    pubsub_topic: str
+    pubsub_subscription: str
 
 
 class ChannelsConfig(_Strict):
@@ -255,3 +258,46 @@ class Job(BaseModel):
     created_at: datetime
     updated_at: datetime
     error: str | None
+
+
+# ---------------------------------------------------------------- channels
+
+
+class Attachment(_Strict):
+    filename: str
+    mime_type: str
+    size_bytes: int = Field(ge=0)
+    data: bytes | None = None
+
+
+class ChannelMessage(_Strict):
+    """An inbound message after sender authentication (channel-neutral)."""
+
+    channel: Literal["email"]
+    message_id: str
+    thread_id: str
+    sender: str
+    authenticated: bool
+    received_at: datetime
+    subject: str | None
+    text: str
+    attachments: list[Attachment] = Field(default_factory=list)
+
+
+class OutboundMessage(_Strict):
+    """A message to send. Body text comes only from a reply template in the store repo."""
+
+    channel: Literal["email"]
+    to: str
+    template: str
+    variables: dict[str, str] = Field(default_factory=dict)
+    thread_id: str | None = None
+    in_reply_to: str | None = None  # Message-ID of the message being answered
+    attachments: list[Attachment] = Field(default_factory=list)
+
+
+class HealthStatus(_Strict):
+    ok: bool
+    checked_at: datetime
+    problems: list[str] = Field(default_factory=list)
+    details: dict[str, str] = Field(default_factory=dict)
