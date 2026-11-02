@@ -34,6 +34,8 @@ VALID_STORE: dict[str, Any] = {
             "require": {"dkim": "pass", "dmarc": "pass"},
             "pubsub_topic": "agent-push",
             "pubsub_subscription": "agent-pull",
+            "text_direction": "rtl",
+            "language": "he",
         }
     },
     "costs": {

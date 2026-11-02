@@ -7,6 +7,7 @@ templates. Replies stay in the thread (``threadId``, ``In-Reply-To``, ``Referenc
 from __future__ import annotations
 
 import base64
+import html
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
@@ -35,7 +36,25 @@ def build_mime(
         mime["In-Reply-To"] = msg.in_reply_to
         mime["References"] = msg.in_reply_to
     mime.set_content(reply.body, charset="utf-8")
+    mime.add_alternative(_html(reply.body, config), subtype="html", charset="utf-8")
     return mime
+
+
+def _html(body: str, config: EmailChannelConfig) -> str:
+    """The same text as HTML, so mail clients render the store's direction (RTL for Hebrew).
+
+    Text is escaped; no markup from templates or variables is passed through.
+    """
+    paragraphs = "".join(
+        f"<p>{'<br>'.join(html.escape(line) for line in block.splitlines())}</p>"
+        for block in body.strip().split("\n\n")
+    )
+    align = "right" if config.text_direction == "rtl" else "left"
+    return (
+        f'<!doctype html><html lang="{html.escape(config.language)}" '
+        f'dir="{config.text_direction}"><body dir="{config.text_direction}" '
+        f'style="text-align:{align}">{paragraphs}</body></html>'
+    )
 
 
 class GmailSender:

@@ -6,6 +6,9 @@
   3. PUT the flags back to 0 (the product must not enter any catalog while it exists).
   4. Keep the product (hidden) for a manual storefront check; registry saved in OUT.
   On any error after the create, the product is deleted immediately.
+--mode disable
+  PUT status=0 (hidden stays 1) on every active product in the registry, for the manual
+  check of whether a disabled product is still reachable by direct link.
 --mode delete
   Delete every active product in the registry and confirm 404.
 """
@@ -100,10 +103,24 @@ async def delete_all(
     return lines or ["- nothing active in the registry"]
 
 
+async def disable_all(
+    client: IStoresClient, registry: JsonFileRegistry, ids: list[int]
+) -> list[str]:
+    lines: list[str] = []
+    for pid in ids:
+        if not registry.is_active(pid):
+            continue
+        await client.update_product(pid, {"hidden": 1, "status": 0})
+        p = _p(await client.get_product(pid))
+        url = str(p.get("product_url", "")).split("?", 1)[0]
+        lines.append(f"- {pid}: status={p.get('status')} hidden={p.get('hidden')} url `{url}`")
+    return lines or ["- nothing active in the registry"]
+
+
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--mode", choices=["create", "delete"], required=True)
+    ap.add_argument("--mode", choices=["create", "disable", "delete"], required=True)
     ap.add_argument("--image-url", default="")
     args = ap.parse_args()
     configure_logging()
@@ -118,7 +135,11 @@ async def main() -> None:
             lines = await create(client, registry, raw, args.image_url)
         else:
             ids = json.loads(reg_path.read_text(encoding="utf-8")) if reg_path.exists() else []
-            lines = await delete_all(client, registry, [int(i["product_id"]) for i in ids])
+            pids = [int(i["product_id"]) for i in ids]
+            if args.mode == "disable":
+                lines = await disable_all(client, registry, pids)
+            else:
+                lines = await delete_all(client, registry, pids)
     out = args.out / "docs" / "live-runs" / f"{stamp}-p0-06b-{args.mode}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(f"# P0-06b {args.mode} - {stamp}\n\n" + "\n".join(lines) + "\n", "utf-8")
