@@ -1,7 +1,8 @@
 ---
 module: images
-status: proposed         # P0-10 part only: generator.py + postprocess.py. The rest (classifier, budget, text_guard) is written in phase 6.
-proposed_at: 2026-11-02
+status: approved         # P0-10 part only: generator.py + postprocess.py. The rest (classifier, budget, text_guard) is written in phase 6.
+approved_by: DEV (Or)
+approved_at: 2026-11-02  # PR #22 + chat
 phase: 0 (generator + postprocess for the P0-10 bake-off), 6 (everything else)
 ---
 
@@ -97,3 +98,19 @@ The API key is read with `core.config.get_secret(cfg, "gemini_api_key")` and sen
    - the key never appears in logs
 2. **Postprocess:** a 900×1600 input becomes 1200×1200 with the product fully inside (padding, not cropping), and no EXIF.
 3. **Live** (through the `live` workflow, within the phase-0 Gemini budget of 3 USD): one main image per bake-off product per candidate model, 2 variations. The report records the redacted response shape and the actual ledger spend.
+
+## Implementation notes (2026-11-02)
+- **Endpoint.** `POST https://generativelanguage.googleapis.com/v1/models/<model>:generateContent`, as in Google's image-generation page.
+  - That page is now titled "Gemini Generate Content API (Legacy)". Google's main docs moved to the Interactions API.
+  - No shutdown date is given, and the model list (observed 02.11) declares `generateContent` for all three candidates.
+  - Kept as approved. A move to Interactions is open question #30 and would change only this adapter.
+- **Request.**
+  - Parts use `inline_data {mime_type, data}`, as in the documented example.
+  - `generationConfig` has `responseModalities: ["TEXT","IMAGE"]` and `imageConfig {aspectRatio: "1:1", imageSize}`.
+  - The aspect ratio is fixed at 1:1 because the output is always square.
+- **Response.** Read `candidates[0].content.parts[].inlineData {mimeType, data}`. Nothing else is trusted. `last_shape` keeps the response keys and types (never the bytes) for the live report.
+- **Cost when no image or no usage.**
+  - Text-only output has no price in `store.yaml`. So when no image comes back, or `usageMetadata.promptTokenCount` is missing, the pre-call estimate is recorded with `estimated=True`.
+  - The estimate is an upper bound, so the caps stay safe.
+- **Input estimate.** Google's page states no token count for input images. The authorize estimate therefore uses `images.est_input_tokens_per_reference` from `store.yaml`, which is replaced by the observed `promptTokenCount` after the first live run.
+- **Core models.** `ReferenceImage` was added, with name, mime type and bytes. `GeneratedImage` also carries `finish_reason`, `usd` and `estimated_cost`.

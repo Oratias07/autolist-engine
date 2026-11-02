@@ -108,10 +108,20 @@ class LlmConfig(_Strict):
     prices: dict[str, Any] | None
 
 
+class ImageModelPrices(_Strict):
+    """Standard (non-batch) prices from the provider's official page, per model."""
+
+    input_usd_per_mtok: Decimal = Field(ge=0)
+    per_image_usd: dict[str, Decimal]  # output image size label ("1K", "2K") -> USD
+
+
 class ImagesConfig(_Strict):
     provider: str
     model: str | None
-    price_per_image_usd: Decimal | None
+    generate_size: str | None
+    bakeoff_candidates: list[str]
+    est_input_tokens_per_reference: int | None  # authorize estimate only; real usage is recorded
+    prices: dict[str, ImageModelPrices]
     output_px: int = Field(gt=0)
     variations_per_role: int = Field(gt=0)
 
@@ -248,6 +258,36 @@ class CostSummary(_Strict):
     monthly_cap: Decimal
     next_threshold: Decimal  # next alert threshold above spend; monthly_cap when none is left
     reset_date: date  # first day of next month, store timezone
+
+
+# ---------------------------------------------------------------- images
+
+
+class ReferenceImage(_Strict):
+    name: str
+    mime_type: Literal["image/jpeg", "image/png", "image/webp"]
+    data: bytes
+
+
+class ImageRequest(_Strict):
+    job_id: str | None
+    model: str
+    role: Literal["main", "lifestyle"]
+    prompt_name: str
+    variables: dict[str, str]
+    references: list[ReferenceImage] = Field(min_length=1, max_length=4)
+
+
+class GeneratedImage(_Strict):
+    model: str
+    role: Literal["main", "lifestyle"]
+    mime_type: str
+    data: bytes
+    size_px: tuple[int, int]
+    text_parts: list[str]
+    finish_reason: str | None
+    usd: Decimal
+    estimated_cost: bool
 
 
 # ---------------------------------------------------------------- jobs (skeleton)
