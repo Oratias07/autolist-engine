@@ -16,7 +16,7 @@ make check
 claude --add-dir "$AUTOLIST_STORE_DIR"     # Claude Code; reads CLAUDE.md first
 ```
 
-GCP credentials: `gcloud auth application-default login` with **your own** account. Secrets are read from Secret Manager at runtime. Nothing goes in `.env`.
+Secrets are read from Secret Manager at runtime, and nothing goes in `.env`. Live calls (real store, paid APIs) do not run from a dev machine or session. They run through the store repo's `live` GitHub Actions workflow, which authenticates to GCP with Workload Identity Federation. See `CLAUDE.md` → Live runs.
 
 ## Rules
 See `CLAUDE.md`. In short:
