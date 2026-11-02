@@ -81,7 +81,7 @@ def main() -> None:
             time.sleep(10)
             continue
         pushes += 1
-        ids, latest = new_message_ids(service, watch["historyId"])
+        ids, _ = new_message_ids(service, watch["historyId"])
         for mid in ids:
             if mid in seen:
                 continue
