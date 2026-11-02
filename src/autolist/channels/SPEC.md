@@ -78,3 +78,19 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 3. `mail_sender` sends `cost_alert` to the owner in plain text, with the signature. A test asserts any other recipient raises `RecipientNotAllowed`.
 4. The health check runs on day 1 and again after day 8. The token still refreshes on day 8, which proves no 7-day expiry. Both results are recorded in decisions.
 5. Logs contain no message bodies and no tokens (log-capture test).
+
+## Implementation notes (P0-08 offline part, 2026-11-02)
+- **Models location.** `ChannelMessage`, `OutboundMessage`, `Attachment` and `HealthStatus` live in `core/models.py`, not `base.py`. The SPEC table put them in `base.py`, but the overriding rule 3 in CLAUDE.md says modules exchange only core models, and `agent_runtime` will need them without importing `channels`. `base.py` keeps the `Channel` protocol.
+- **`OutboundMessage.in_reply_to`.** Holds the Message-ID being answered, so a reply sets `In-Reply-To` and `References` (the SPEC requires in-thread replies).
+- **Files added:**
+  - `errors.py`
+  - `templates.py`: reply-template loader. Front matter has `subject` and `variables`, rendering is strict, and `_signature.md` is appended to every body (templates never include it).
+  - `email/gmail_client.py`: credentials from the two secrets, `ChannelAuthError` on refresh failure.
+  - `email/health.py`
+- **Sender auth.**
+  - Only the topmost `Authentication-Results` header with authserv-id `mx.google.com` is trusted, so a header the sender added lower in the message is ignored.
+  - DKIM must pass with `header.d`/`header.i` equal to the sender's domain, and DMARC must pass with `header.from` equal to it.
+  - Exactly one `From` address is allowed.
+- **Fetching.** History is read with `historyTypes=messageAdded`. Headers come with `format=metadata`; bodies are not fetched in P0 (that is `mail_reader`, P3).
+- **Config added** (`store.yaml`): `secrets.gmail_oauth_client`, `channels.email.pubsub_topic`, `channels.email.pubsub_subscription`.
+- **OAuth bootstrap.** `scripts/setup/gmail_oauth_bootstrap.py` runs once in Cloud Shell. It stores the client JSON and the refresh token directly in Secret Manager, after checking that the signed-in account is the agent mailbox.

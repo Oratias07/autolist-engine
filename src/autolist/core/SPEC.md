@@ -122,3 +122,7 @@ These record how the approved behavior was implemented. No behavior was added.
 - `record()` still returns the events, so nothing else changes.
 
 **Acceptance.** Two crossings recorded through any module come out of `drain_alerts()` exactly once.
+
+## Additions (2026-11-02, P0-08)
+- `models.py`: channel models (`ChannelMessage`, `OutboundMessage` with `in_reply_to`, `Attachment`, `HealthStatus`). They moved here from `channels/base.py` per CLAUDE.md rule 3.
+- `StoreConfig`: `secrets.gmail_oauth_client`, `channels.email.pubsub_topic`, `channels.email.pubsub_subscription`. These are required keys.

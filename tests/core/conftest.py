@@ -23,6 +23,7 @@ VALID_STORE: dict[str, Any] = {
         "istores_token": "istores-token",
         "anthropic_api_key": "anthropic-api-key",
         "gemini_api_key": "gemini-api-key",
+        "gmail_oauth_client": "gmail-oauth-client",
         "gmail_refresh_token": "gmail-refresh-token",
     },
     "channels": {
@@ -31,6 +32,8 @@ VALID_STORE: dict[str, Any] = {
             "owner_address": "owner@example.com",
             "allowed_senders": ["owner@example.com"],
             "require": {"dkim": "pass", "dmarc": "pass"},
+            "pubsub_topic": "agent-push",
+            "pubsub_subscription": "agent-pull",
         }
     },
     "costs": {

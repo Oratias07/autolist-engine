@@ -9,6 +9,8 @@ Thin CLIs for discovery. Each script:
 | --- | --- | --- |
 | `discovery.py` | P0-05 | no |
 | `hidden_product.py` | P0-06 | one hidden test product, always deleted |
+| `extract_eval.py` | P0-07 | no (Claude only) |
+| `email_check.py` | P0-08 | no (agent mailbox only: watch, read headers, one test email to the owner) |
 
 They run only through the store repo's `live` workflow (WIF, manual, `main`), never from a dev session. Output goes to the store repo.
 
