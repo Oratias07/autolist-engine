@@ -184,7 +184,7 @@ def main() -> None:
                         output_schema=TitleOut,
                         model_role="write",
                         job_id=f"p0-10-text-{pid}",
-                        max_output_tokens=600,
+                        max_output_tokens=1000,
                     )
                 )
                 d = client.complete(
@@ -199,11 +199,17 @@ def main() -> None:
                         output_schema=DescriptionOut,
                         model_role="write",
                         job_id=f"p0-10-text-{pid}",
-                        max_output_tokens=2000,
+                        max_output_tokens=6000,
                     )
                 )
-            except (LLMOutputInvalid, LLMUnavailable) as exc:
-                report += [f"### {pid}: ERROR {type(exc).__name__}", ""]
+            except LLMOutputInvalid as exc:
+                bad = run_dir / model / pid
+                bad.mkdir(parents=True, exist_ok=True)
+                (bad / "invalid_output.txt").write_text(exc.raw_text, encoding="utf-8")
+                report += [f"### {pid}: ERROR LLMOutputInvalid: {str(exc)[:400]}", ""]
+                continue
+            except LLMUnavailable as exc:
+                report += [f"### {pid}: ERROR LLMUnavailable: {str(exc)[:200]}", ""]
                 continue
             usd += t.usd + d.usd
             title, desc = t.parsed, d.parsed
