@@ -134,6 +134,7 @@ def _voice(store: Path) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--chosen", action="store_true", help="only llm.models.write")
     args = ap.parse_args()
     configure_logging()
 
@@ -160,7 +161,11 @@ def main() -> None:
     report = [f"# P0-10 text bake-off - {stamp}", ""]
     summary: list[str] = []
 
-    candidates: list[str] = base.require("llm.bakeoff_candidates")
+    candidates: list[str] = (
+        [base.require("llm.models.write")]
+        if args.chosen
+        else base.require("llm.bakeoff_candidates")
+    )
     for model in candidates:
         data = base.model_dump()
         data["llm"]["models"]["write"] = model
