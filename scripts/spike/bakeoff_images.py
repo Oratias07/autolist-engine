@@ -4,7 +4,12 @@ Reads the product list from the store repo (fixtures/samples/p0-10-bakeoff.yaml)
 images for each product, and writes the post-processed images plus a report into OUT.
 
   --stage main       every model in images.bakeoff_candidates, images.variations_per_role each
+                     (--chosen: only images.model, for products added after the comparison)
   --stage lifestyle  only images.model (set after the main-image comparison)
+  --products         limit the run to these product ids
+
+A reference may be {url, save_as}: it is downloaded once from a public URL (for example the
+store's CDN image of an existing product) into the store repo, then used like a local file.
 
 Costs go through a persisted ledger (fixtures/ledger/p0-gemini.json), and the run stops before
 a call that would take total Gemini spend past costs.phase0_budget.gemini.
@@ -15,11 +20,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import urllib.parse
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+import httpx
 import yaml
 
 from autolist.core.config import get_secret, load_store_config, store_dir
@@ -34,10 +41,27 @@ _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".web
 SCENE_RULES = "Office setting. No people (open question #19 is not answered yet)."
 
 
-def _refs(samples: Path, names: list[str]) -> list[ReferenceImage]:
+def _fetch(samples: Path, out_root: Path, ref: dict[str, str]) -> str:
+    """Download a public reference image once; return its path relative to samples."""
+    rel = ref["save_as"]
+    for base in (samples, out_root / "fixtures" / "samples"):
+        if (base / rel).is_file():
+            return rel
+    url = ref["url"]
+    if urllib.parse.urlsplit(url).scheme != "https":
+        raise ValueError(f"reference url must be https: {url}")
+    r = httpx.get(url, timeout=60, follow_redirects=False)
+    r.raise_for_status()
+    dest = out_root / "fixtures" / "samples" / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(r.content)
+    return rel
+
+
+def _refs(bases: list[Path], names: list[str]) -> list[ReferenceImage]:
     out = []
     for name in names:
-        path = samples / name
+        path = next((b / name for b in bases if (b / name).is_file()), bases[0] / name)
         mime = _MIME[path.suffix.lower()]
         out.append(ReferenceImage(name=path.name, mime_type=mime, data=path.read_bytes()))
     return out
@@ -47,6 +71,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--stage", choices=["main", "lifestyle"], required=True)
+    ap.add_argument("--chosen", action="store_true", help="main stage with images.model only")
+    ap.add_argument("--products", nargs="*", default=None)
     args = ap.parse_args()
     configure_logging()
 
@@ -56,7 +82,15 @@ def main() -> None:
     products: dict[str, Any] = yaml.safe_load(
         (samples / "p0-10-bakeoff.yaml").read_text(encoding="utf-8")
     )["products"]
-    if args.stage == "main":
+    if args.products:
+        unknown = set(args.products) - set(products)
+        if unknown:
+            raise SystemExit(f"unknown products: {sorted(unknown)}")
+        products = {k: v for k, v in products.items() if k in args.products}
+    if args.stage == "main" and args.chosen:
+        models = [cfg.require("images.model")]
+        prompt_name, role = "image_main", "main"
+    elif args.stage == "main":
         models = list(cfg.images.bakeoff_candidates)
         prompt_name, role = "image_main", "main"
     else:
@@ -86,8 +120,12 @@ def main() -> None:
     rows: list[dict[str, Any]] = []
     shape: Any = None
     stopped = ""
+    bases = [samples, args.out / "fixtures" / "samples"]
     for pid, product in products.items():
-        refs = _refs(samples, product["references"])
+        names = [
+            r if isinstance(r, str) else _fetch(samples, args.out, r) for r in product["references"]
+        ]
+        refs = _refs(bases, names)
         variables = {
             "product_facts": product["product_facts"].strip(),
             "reference_notes": product["reference_notes"].strip(),
