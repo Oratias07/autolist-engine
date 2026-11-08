@@ -114,3 +114,13 @@ The API key is read with `core.config.get_secret(cfg, "gemini_api_key")` and sen
   - The estimate is an upper bound, so the caps stay safe.
 - **Input estimate.** Google's page states no token count for input images. The authorize estimate therefore uses `images.est_input_tokens_per_reference` from `store.yaml`, which is replaced by the observed `promptTokenCount` after the first live run.
 - **Core models.** `ReferenceImage` was added, with name, mime type and bytes. `GeneratedImage` also carries `finish_reason`, `usd` and `estimated_cost`.
+
+## Observed (live run 42460425998, 08.11.2026)
+- **Response shape** (keys only):
+  - `candidates[].content.parts[]` holds `inlineData {mimeType, data}` and `thoughtSignature`.
+  - The candidate also has `role`, `finishReason` and `index`.
+  - `usageMetadata` has `promptTokenCount`, `candidatesTokenCount`, `totalTokenCount`, `promptTokensDetails[]`, `candidatesTokensDetails[]` (both `{modality, tokenCount}`), `thoughtsTokenCount` and `serviceTier`.
+  - Top level also has `modelVersion` and `responseId`.
+  - The documented `inlineData` path is confirmed.
+- **Output size:** `imageSize: "2K"` returns 2048×2048 for both candidates.
+- **Thinking tokens:** both models report `thoughtsTokenCount`. The ledger records the per-image price plus input tokens only, so thinking tokens are not counted. The comparison with the provider's balance is open question #31 in the store repo. If they are billed, the cost formula changes in the same PR as this SPEC.
