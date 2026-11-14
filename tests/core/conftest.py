@@ -74,7 +74,10 @@ VALID_STORE: dict[str, Any] = {
         "reminder_after_days": 3,
         "expire_after_days": 14,
         "approval_token_ttl_hours": 72,
+        "job_step_timeout_s": 600,
+        "developer_contact": "dev@example.com",
     },
+    "deploy": {"stage": "dev"},
 }
 
 

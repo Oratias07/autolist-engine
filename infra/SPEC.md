@@ -66,7 +66,9 @@ There is no public endpoint in this phase. The owner's preview goes by email (P1
 - **What is kept for later:** Terraform moves to phase 9 (hardening), where the script's resource list becomes the import list.
 
 **Deploy:** a `deploy` workflow in the store repo (manual, `main` only, WIF). It builds the image from the engine at a pinned commit, pushes it, and updates the Cloud Run service.
-- This needs three more roles on `autolist-ci`: `artifactregistry.writer` on the repository, `run.developer` on the service, `serviceAccountUser` on `autolist-run`.
+- This needs three more roles on `autolist-ci`: `artifactregistry.writer` on the repository, `run.developer` on the project, `serviceAccountUser` on `autolist-run`.
+  - `run.developer` is project-level because the service does not exist before the first deploy and cannot hold the binding yet.
+- `infra/setup.sh` is part 1 (everything that does not need the service URL). Part 2 runs after the first deploy: the push subscription, the two Scheduler jobs and `run.invoker` for `autolist-invoke`.
 - The store repo content (playbook, prompts, replies, `store.yaml`) is copied into the image at build time, so a deploy is also how a prompt or playbook change goes live.
 
 ## Region
