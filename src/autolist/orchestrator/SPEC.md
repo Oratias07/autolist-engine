@@ -65,3 +65,21 @@ Only through `channel.send`. Draining the outbox is the ledger's own state chang
 3. A simulated entry that brings the month to 60.00 sends exactly one `budget_cap_reached`, and the next `authorize()` is refused.
 4. A send failure leaves the events in the outbox (the next call sends them).
 5. Live: the P0-09 spike runs once through the `live` workflow. It uses an in-memory ledger, makes no paid calls and does no store writes. It sends criteria 1 and 3 as real emails from the agent mailbox to the owner, and the report records the Gmail ids.
+
+## Entrypoints (P1-03, behaviour approved in `infra/SPEC.md` on 2026-11-14)
+Files: `entrypoints.py` (Starlette app, wiring only) and `tasks_queue.py` (Cloud Tasks).
+
+| Route | Behaviour |
+| --- | --- |
+| `GET /healthz` | Returns the injected health report; 503 when it is not ok. |
+| `POST /events/gmail` | Refuses a body that is not a Pub/Sub push (400). Otherwise calls `channels.email.inbox.poll_accepted` and enqueues one `/tasks/job` task per accepted message. |
+| `POST /cron/renew-watch` | Calls `channels.email.inbox.renew_watch` and returns the new expiry. |
+
+- **Where the logic lives:**
+  - Reading the mailbox history, claiming message ids and verifying the sender are in `channels`.
+  - The cursor and the claimed ids are in `core.state_store` (Firestore).
+  - This module only connects them to the queue.
+- **Duplicates:** a message id is claimed before anything else happens. A repeated push finds it claimed and enqueues nothing.
+- **Rejected senders** are recorded with the reason and get no reply.
+- **Not yet here:** `/tasks/job` and `/cron/watchdog` arrive with the job runner (P1-04). Until then the push subscription is not created, so no owner email is accepted and then left unanswered.
+- **Authentication** is Cloud Run's: the service is not public, and only the invoker service account can call it.

@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from google.api_core.exceptions import AlreadyExists
+
 
 class FakeSnapshot:
     def __init__(self, doc_id: str, data: dict[str, Any] | None) -> None:
@@ -21,6 +23,11 @@ class FakeDocument:
         self._store, self._id = store, doc_id
 
     def set(self, data: dict[str, Any]) -> None:
+        self._store[self._id] = copy.deepcopy(data)
+
+    def create(self, data: dict[str, Any]) -> None:
+        if self._id in self._store:
+            raise AlreadyExists(f"document {self._id} exists")  # type: ignore[no-untyped-call]
         self._store[self._id] = copy.deepcopy(data)
 
     def get(self) -> FakeSnapshot:
