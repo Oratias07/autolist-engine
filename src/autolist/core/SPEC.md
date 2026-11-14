@@ -161,18 +161,18 @@ These record how the approved behavior was implemented. No behavior was added.
 - A `CostEntry` without `category` is rejected.
 - Requeued events come out of the next drain first.
 
-## Amendment (2026-11-14, **proposed**): blob store and product draft (P1-01)
+## Amendment (2026-11-14, approved by DEV, PR #29): blob store and product draft (P1-01)
 - **`core/blob_store.py`** has a `BlobStore` protocol:
   - `put(name, data, content_type) -> ImageRef`
   - `signed_url(ref, ttl_s) -> str`
 - **Adapters:**
   - `GcsBlobStore` uses the bucket in `store.yaml` → `gcp.reference_bucket`. It is private, with no public access. V4 signed URLs are signed through IAM `signBlob`, so no key file exists.
   - `InMemoryBlobStore` is for tests.
-- **Models:** `ImageRef(bucket, name, content_type)`, `ProductDraft`, `CreatedProduct(product_id, sku)`.
+- **Models:** `ImageRef(bucket, name, content_type)`, `ProductDraft`. `BlobStore` also has `delete(ref)`, so an image is removed once the store has copied it.
 - **Config:** `publishing.image_url_ttl_s` is required. `gcp.reference_bucket` must be set, or `ConfigMissing`.
 - **Why core:** storage is shared read/write I/O behind an interface. `images` and `publish` both need it, and feature modules may not import each other.
 - **Acceptance:**
   - `put` then `signed_url` round-trips in memory
-  - the GCS adapter is covered by a mocked transport
+  - the GCS adapter is covered with a fake storage client (put, IAM-signed V4 URL, delete)
   - a TTL above 3600 is refused
   - a missing bucket raises `ConfigMissing`

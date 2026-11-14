@@ -127,6 +127,7 @@ class ImagesConfig(_Strict):
 
 
 class PublishingConfig(_Strict):
+    image_url_ttl_s: int = Field(gt=0, le=3600)  # signed URL lifetime for store image fetches
     unhide_enabled: bool
     enabled_by: str | None
     enabled_at: str | None
@@ -288,6 +289,32 @@ class GeneratedImage(_Strict):
     finish_reason: str | None
     usd: Decimal
     estimated_cost: bool
+
+
+# ---------------------------------------------------------------- storage and drafts
+
+
+class ImageRef(_Strict):
+    """An object in the private reference bucket."""
+
+    bucket: str
+    name: str
+    content_type: Literal["image/jpeg", "image/png", "image/webp"]
+
+
+class ProductDraft(_Strict):
+    """Everything the publisher needs to create one hidden, disabled product."""
+
+    job_id: str
+    name: str = Field(min_length=1)
+    description_html: str  # sanitized by the caller
+    price: Decimal = Field(ge=0)
+    quantity: int = Field(ge=0)
+    sku: str = Field(min_length=1)
+    model: str = Field(min_length=1)
+    upc: str | None
+    main_image: ImageRef
+    extra_images: list[ImageRef]
 
 
 # ---------------------------------------------------------------- jobs (skeleton)

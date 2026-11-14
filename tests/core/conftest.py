@@ -63,7 +63,12 @@ VALID_STORE: dict[str, Any] = {
         "output_px": 1200,
         "variations_per_role": 2,
     },
-    "publishing": {"unhide_enabled": False, "enabled_by": None, "enabled_at": None},
+    "publishing": {
+        "image_url_ttl_s": 900,
+        "unhide_enabled": False,
+        "enabled_by": None,
+        "enabled_at": None,
+    },
     "agent": {
         "max_revision_rounds": 3,
         "reminder_after_days": 3,

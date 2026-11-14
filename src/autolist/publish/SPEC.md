@@ -118,7 +118,7 @@ These record how the approved behavior was implemented. No behavior was added.
   - It stays like that, "ready", until publication.
   - Publication sets `hidden: 0` and `status: 1` together, through the two-gate unhide check (store switch on, plus price, category and name).
 
-## Amendment (2026-11-14, **proposed**): `publisher.create_hidden` and `verifier.verify_created` (P1-01)
+## Amendment (2026-11-14, approved by DEV, PR #29): `publisher.create_hidden` and `verifier.verify_created` (P1-01)
 Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-driven updates stay in phase 8.
 
 **Why now.** DEV asked (14.11) to put real test products into the store, hidden and disabled, so the client can see them in the admin UI.
@@ -135,7 +135,7 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
 - `extra_images: list[ImageRef]`
 
 **`publisher.create_hidden(draft) -> CreatedProduct`**
-1. Duplicate check: `find_by_sku(draft.sku)`. A hit raises `DuplicateSku`, and nothing is created.
+1. Duplicate check: scan the catalog pages for the same `sku` or `model` (the playbook's `unique_check`; no server-side search is recorded in the field map). A hit raises `DuplicateProduct`, and nothing is created.
 2. Sign the main image with `core.blob_store.signed_url(ref, ttl)`. The TTL comes from `store.yaml` (`publishing.image_url_ttl_s`). The URL is never logged.
 3. `client.create_product(body)` with `hidden: 1`, `status: 0` and only fields recorded in the store repo field map.
 4. `verifier.verify_created(product_id, draft)` (below).
@@ -165,3 +165,7 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
   - a verify mismatch raises and sends no DELETE or PUT
   - non-empty `extra_images` raises
 - Live (needs DEV approval for the exact run): the 5 P0-10 samples are created with price 0, verified hidden and disabled, and their ids are recorded in the registry and the report.
+
+**Implementation notes (2026-11-14).**
+- `create_hidden` returns the product id. The registry already records the created product.
+- The signed URL is registered with the log redaction filter before the POST.
