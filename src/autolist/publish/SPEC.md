@@ -117,3 +117,51 @@ These record how the approved behavior was implemented. No behavior was added.
   - Every product is created with `hidden: 1` and `status: 0`. The client refuses any other create (`UnsafeCreate`).
   - It stays like that, "ready", until publication.
   - Publication sets `hidden: 0` and `status: 1` together, through the two-gate unhide check (store switch on, plus price, category and name).
+
+## Amendment (2026-11-14, **proposed**): `publisher.create_hidden` and `verifier.verify_created` (P1-01)
+Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-driven updates stay in phase 8.
+
+**Why now.** DEV asked (14.11) to put real test products into the store, hidden and disabled, so the client can see them in the admin UI.
+
+**Input.** `ProductDraft` (new core model):
+- `job_id`
+- `name` (Hebrew, language id from `store.yaml`)
+- `description_html` (already sanitized by the caller)
+- `price: Decimal`
+- `quantity: int`
+- `sku`, `model`
+- `upc: str | None`
+- `main_image: ImageRef` (bucket object name)
+- `extra_images: list[ImageRef]`
+
+**`publisher.create_hidden(draft) -> CreatedProduct`**
+1. Duplicate check: `find_by_sku(draft.sku)`. A hit raises `DuplicateSku`, and nothing is created.
+2. Sign the main image with `core.blob_store.signed_url(ref, ttl)`. The TTL comes from `store.yaml` (`publishing.image_url_ttl_s`). The URL is never logged.
+3. `client.create_product(body)` with `hidden: 1`, `status: 0` and only fields recorded in the store repo field map.
+4. `verifier.verify_created(product_id, draft)` (below).
+5. On a verify mismatch, the product stays hidden and disabled, and `VerifyMismatch` lists the fields. Nothing is auto-deleted or auto-retried.
+
+**`verifier.verify_created`** does a GET and compares:
+- name
+- price
+- quantity
+- sku, model
+- `hidden` truthy
+- `status` falsy
+- `image` on the iStores CDN host
+
+**Extra images.**
+- The write shape of `images` has not been observed. GET shows an empty `images`.
+- Per CLAUDE.md rule 6, `create_hidden` sends only the main image.
+- Adding `extra_images` is a separate, approved experiment after a documented create. Until it is recorded in the field map, `extra_images` must be empty or the call raises `UnobservedField`.
+
+**Not in this amendment:** unhide, category selection, feeds, upsale, updates from owner replies.
+
+**Acceptance.**
+- Unit:
+  - the body always has `hidden: 1` and `status: 0`
+  - a duplicate SKU sends no POST
+  - the signed URL does not appear in logs
+  - a verify mismatch raises and sends no DELETE or PUT
+  - non-empty `extra_images` raises
+- Live (needs DEV approval for the exact run): the 5 P0-10 samples are created with price 0, verified hidden and disabled, and their ids are recorded in the registry and the report.
