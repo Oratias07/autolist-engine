@@ -35,7 +35,7 @@ Run the engine as a service that wakes up when the agent mailbox gets mail, work
 | --- | --- | --- |
 | `jobs` | one document per job: state, thread id, versions | – (new) |
 | `created_products` | the registry of products this system created | the JSON file registry |
-| `cost_ledger` | one document per month: entries, totals, alerts sent | the JSON ledger files |
+| `cost_ledger` | one document per month: entries, total, alerts sent, cap flag; plus `_outbox` for undelivered alerts. Job totals are rebuilt from entries on load | the JSON ledger files |
 | `channel_state` | Gmail `historyId`, watch expiry | – |
 | `processed_messages` | Gmail message ids already handled | – |
 
