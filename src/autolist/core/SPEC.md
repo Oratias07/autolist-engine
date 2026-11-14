@@ -160,3 +160,19 @@ These record how the approved behavior was implemented. No behavior was added.
 - `month_summary` on seeded entries returns the expected split, `next_threshold` (30.10 → 40, 50.10 → 60) and `reset_date` (2026-11-15 → 2026-12-01; 2026-12-31 23:30 Israel time → 2027-01-01).
 - A `CostEntry` without `category` is rejected.
 - Requeued events come out of the next drain first.
+
+## Amendment (2026-11-14, **proposed**): blob store and product draft (P1-01)
+- **`core/blob_store.py`** has a `BlobStore` protocol:
+  - `put(name, data, content_type) -> ImageRef`
+  - `signed_url(ref, ttl_s) -> str`
+- **Adapters:**
+  - `GcsBlobStore` uses the bucket in `store.yaml` → `gcp.reference_bucket`. It is private, with no public access. V4 signed URLs are signed through IAM `signBlob`, so no key file exists.
+  - `InMemoryBlobStore` is for tests.
+- **Models:** `ImageRef(bucket, name, content_type)`, `ProductDraft`, `CreatedProduct(product_id, sku)`.
+- **Config:** `publishing.image_url_ttl_s` is required. `gcp.reference_bucket` must be set, or `ConfigMissing`.
+- **Why core:** storage is shared read/write I/O behind an interface. `images` and `publish` both need it, and feature modules may not import each other.
+- **Acceptance:**
+  - `put` then `signed_url` round-trips in memory
+  - the GCS adapter is covered by a mocked transport
+  - a TTL above 3600 is refused
+  - a missing bucket raises `ConfigMissing`
