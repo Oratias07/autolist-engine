@@ -1,0 +1,153 @@
+"""publisher.create_hidden + verifier (P1-01): synthetic store, no network."""
+
+from __future__ import annotations
+
+import json
+import logging
+from decimal import Decimal
+from typing import Any
+
+import httpx
+import pytest
+
+from autolist.core.blob_store import InMemoryBlobStore
+from autolist.core.models import ImageRef, ProductDraft
+from autolist.publish.errors import DuplicateProduct, UnobservedField, VerifyMismatch
+from autolist.publish.publisher import create_hidden
+from tests.publish.conftest import make_client, make_config
+
+LANG = 3
+CDN = "https://cdn.istores.co.il/image/upload/clients/1/abc.jpg"
+
+
+def _draft(blobs: InMemoryBlobStore, **kw: Any) -> ProductDraft:
+    ref = blobs.put("job-1/main.jpg", b"img", "image/jpeg")
+    base: dict[str, Any] = {
+        "job_id": "job-1",
+        "name": "כיסא בדיקה",
+        "description_html": "<p>תיאור</p>",
+        "price": Decimal(0),
+        "quantity": 2,
+        "sku": "SKU-1",
+        "model": "M-1",
+        "upc": None,
+        "main_image": ref,
+        "extra_images": [],
+    }
+    base.update(kw)
+    return ProductDraft(**base)
+
+
+class Store:
+    """Synthetic store: one catalog page, POST creates id 970, GET echoes the posted body."""
+
+    def __init__(self, catalog: list[dict[str, Any]] | None = None, **overrides: Any) -> None:
+        self.catalog = catalog or []
+        self.overrides = overrides
+        self.posted: dict[str, Any] | None = None
+
+    def __call__(self, r: httpx.Request) -> httpx.Response:
+        if r.method == "GET" and r.url.path.count("/") == 3:  # /products/<limit>/<page>
+            return httpx.Response(200, json={"products": self.catalog})
+        if r.method == "POST":
+            self.posted = json.loads(r.content)
+            return httpx.Response(200, text='"productID: 970"')
+        if r.method == "GET":
+            assert self.posted is not None
+            p = {**self.posted, "image": CDN, "product_id": 970, **self.overrides}
+            return httpx.Response(200, json={"product": p})
+        return httpx.Response(500)
+
+
+async def _run(store: Store, draft: ProductDraft, blobs: InMemoryBlobStore) -> Any:
+    client, rec, reg, _ = make_client(store)
+    try:
+        pid = await create_hidden(
+            draft, config=make_config(), client=client, blobs=blobs, language_id=LANG, page_size=100
+        )
+    finally:
+        await client.aclose()
+    return pid, rec, reg
+
+
+async def test_creates_hidden_disabled_and_verifies() -> None:
+    blobs, store = InMemoryBlobStore(), Store(catalog=[{"sku": "other", "model": "x"}])
+    pid, rec, reg = await _run(store, _draft(blobs), blobs)
+    assert pid == 970
+    assert reg.is_active(970)
+    assert store.posted is not None
+    assert store.posted["hidden"] == 1
+    assert store.posted["status"] == 0
+    assert store.posted["price"] == 0
+    assert store.posted["product_description"] == {
+        "3": {"name": "כיסא בדיקה", "description": "<p>תיאור</p>"}
+    }
+    assert store.posted["image"].startswith("https://storage.example.com/")
+    assert "upc" not in store.posted
+    assert [c.method for c in rec.calls] == ["GET", "POST", "GET"]
+
+
+@pytest.mark.parametrize("field", ["sku", "model"])
+async def test_duplicate_sends_no_post(field: str) -> None:
+    blobs = InMemoryBlobStore()
+    value = "SKU-1" if field == "sku" else "M-1"
+    store = Store(catalog=[{"product_id": 5, field: value}])
+    with pytest.raises(DuplicateProduct) as exc:
+        await _run(store, _draft(blobs), blobs)
+    assert exc.value.field == field
+    assert store.posted is None
+
+
+async def test_extra_images_are_refused_before_any_call() -> None:
+    blobs = InMemoryBlobStore()
+    extra = ImageRef(bucket="test-bucket", name="x.jpg", content_type="image/jpeg")
+    store = Store()
+    with pytest.raises(UnobservedField):
+        await _run(store, _draft(blobs, extra_images=[extra]), blobs)
+    assert store.posted is None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "problem"),
+    [
+        ({"hidden": 0}, "NOT hidden"),
+        ({"status": 1}, "NOT disabled"),
+        ({"price": 5}, "price"),
+        ({"quantity": 9}, "quantity"),
+        ({"sku": "zzz"}, "sku"),
+        ({"image": "https://elsewhere.example.com/a.jpg"}, "image"),
+        ({"product_description": {"3": {"name": "אחר"}}}, "name"),
+    ],
+)
+async def test_mismatch_raises_and_sends_no_delete_or_put(
+    overrides: dict[str, Any], problem: str
+) -> None:
+    blobs, store = InMemoryBlobStore(), Store(**overrides)
+    client, rec, _, _ = make_client(store)
+    with pytest.raises(VerifyMismatch) as exc:
+        await create_hidden(
+            _draft(blobs),
+            config=make_config(),
+            client=client,
+            blobs=blobs,
+            language_id=LANG,
+            page_size=100,
+        )
+    await client.aclose()
+    assert exc.value.product_id == 970
+    assert any(problem in p for p in exc.value.problems)
+    assert {c.method for c in rec.calls} <= {"GET", "POST"}
+
+
+async def test_signed_url_is_not_logged(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.DEBUG)
+    blobs, store = InMemoryBlobStore(), Store()
+    await _run(store, _draft(blobs), blobs)
+    assert "sig=test" not in caplog.text
+
+
+async def test_upc_is_sent_when_present() -> None:
+    blobs, store = InMemoryBlobStore(), Store()
+    await _run(store, _draft(blobs, upc="7290000000001"), blobs)
+    assert store.posted is not None
+    assert store.posted["upc"] == "7290000000001"
