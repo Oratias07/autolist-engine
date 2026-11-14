@@ -79,6 +79,13 @@ VALID_STORE: dict[str, Any] = {
         "job_step_timeout_s": 600,
         "developer_contact": "dev@example.com",
     },
+    "intake": {
+        "image_types": ["image/jpeg", "image/png", "image/webp"],
+        "max_attachments": 10,
+        "max_attachment_bytes": 20000000,
+        "max_image_pixels": 50000000,
+        "llm_image_max_edge_px": 1568,
+    },
     "deploy": {"stage": "dev"},
 }
 

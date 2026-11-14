@@ -83,3 +83,8 @@ These record how the approved behavior was implemented.
 - **Retries.** The SDK's own retries are off. 429, 529 and 5xx, timeouts and connection errors: at most 3 tries in total, honoring `retry-after`, then backoff 1 s → 2 s. Any other 4xx is not retried.
 - **Transport.** The SDK uses `httpx2`. Tests inject an `httpx2.MockTransport`.
 - **Alerts.** Threshold events from `record()` stay in the ledger outbox (core amendment) until the orchestrator drains them.
+
+## Amendment (2026-11-14, with the approved fast-track design): images
+- `LLMRequest.images: list[ReferenceImage]` (default empty) are sent as image blocks after the prompt text, in order.
+- The caller (the intake guard) has already checked type, size and pixel count, and downscaled the images.
+- The authorize estimate adds image tokens by Anthropic's documented formula (width × height / 750). The recorded cost uses the real `usage`, as for text.

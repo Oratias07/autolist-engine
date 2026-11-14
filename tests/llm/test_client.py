@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import copy
 import json
 from collections.abc import Callable
@@ -16,7 +17,7 @@ from autolist.core.config import parse_store_config
 from autolist.core.cost_ledger import CostLedger, InMemoryLedgerStore
 from autolist.core.errors import ConfigInvalid, ConfigMissing, CostCapExceeded
 from autolist.core.logging import _clear_registered_secrets
-from autolist.core.models import StoreConfig
+from autolist.core.models import CostEntry, StoreConfig
 from autolist.llm.client import AnthropicClient, LLMRequest
 from autolist.llm.errors import LLMOutputInvalid, LLMUnavailable
 from tests.core.conftest import VALID_STORE
@@ -253,3 +254,53 @@ def test_long_context_tier_applies_above_threshold(tmp_path: Path) -> None:
     long = h.client.complete(_req(output_schema=None))
     assert short.usd == Decimal("0.00015")  # 1000*0.10/1e6 + 100*0.50/1e6
     assert long.usd == Decimal("0.10025")  # 200000*0.50/1e6 + 100*2.50/1e6
+
+
+def _png(w: int, h: int) -> bytes:
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), (1, 2, 3)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_images_are_sent_after_the_text_in_order(tmp_path: Path) -> None:
+    from autolist.core.models import ReferenceImage
+
+    h = Harness(tmp_path, lambda r: _ok('{"name": "x", "price": 1}'))
+    imgs = [
+        ReferenceImage(name="a.png", mime_type="image/png", data=_png(10, 10)),
+        ReferenceImage(name="b.png", mime_type="image/png", data=_png(20, 10)),
+    ]
+    h.client.complete(_req(images=imgs))
+    content = h.calls[0]["messages"][0]["content"]
+    assert [b["type"] for b in content] == ["text", "image", "image"]
+    assert content[1]["source"]["media_type"] == "image/png"
+    assert content[2]["source"]["data"] == base64.b64encode(imgs[1].data).decode()
+
+
+def test_image_tokens_count_toward_the_cap(tmp_path: Path) -> None:
+    from autolist.core.models import ReferenceImage
+
+    # a 1500x1500 image is ~3000 tokens by the documented formula; with a nearly spent
+    # per-job budget the estimate must refuse the call before anything is sent
+    big = ReferenceImage(name="a.png", mime_type="image/png", data=_png(1500, 1500))
+    h = Harness(tmp_path, lambda r: _ok("{}"))
+    h.ledger.record(
+        CostEntry(
+            at=datetime.now(UTC),
+            job_id="job-1",
+            provider="seed",
+            category="llm",
+            operation="seed",
+            units=0,
+            unit="usd",
+            usd=Decimal("1.9999"),
+            estimated=False,
+        )
+    )
+    with pytest.raises(CostCapExceeded):
+        h.client.complete(_req(images=[big], max_output_tokens=1))
+    assert h.calls == []
