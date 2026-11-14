@@ -1,7 +1,8 @@
 ---
 document: fast-track pipeline (P1-04 to P1-08)
-status: proposed         # one design for DEV approval; after approval each module SPEC gets its section from here, in the same PR as its code
-proposed_at: 2026-11-14
+status: approved         # each module SPEC gets its section from here, in the same PR as its code
+approved_by: DEV (Or)
+approved_at: 2026-11-14  # PR #39 + chat (several products per email, YTS-1001, image choice and printed-text rule)
 ---
 
 # Fast-track pipeline: from an owner email to a product saved hidden and disabled
@@ -65,7 +66,16 @@ The list lives in the store repo's playbook, not in code. Proposed content:
 - **Category is not set.** The write shape of the category field was never observed (CLAUDE.md rule 6). The owner sets it in the store's admin until it is observed and added.
 - **Only the main image is saved.** Extra images depend on P1-02 (observe the `images` write shape). Until then no lifestyle image is generated, so no money is spent on an image that cannot be saved.
 - **No web research.** The description uses only what the owner wrote and what the photo shows on a printed label is not read.
-- **Packaging rule:** the owner marks in the email if the photo shows printed packaging (the playbook's packaging guard). Then the photo itself is processed (square, white padding) and no image is generated. Otherwise a main image is generated from the photo.
+- **Images: two options, always (DEV, 14.11.2026).**
+  - Every preview shows image 1 (the owner's photo after postprocess: square, white padding, no model, no cost) and image 2 (generated). The owner can reply "תמונה 1" or "תמונה 2".
+  - **Which one is preselected** comes from one extra field in the existing extraction call (Haiku, it already runs on every email): `printed_text` per product, true when the photo shows printed text or a label on the product or its packaging. There is no separate check per image.
+  - The writing prompts never see the image, so the description cannot take facts from it.
+  - `printed_text` true → image 1 is preselected, and the preview states, in plain words:
+    - the photo shows printed text;
+    - image 2 was generated, and image generation can change printed text (observed in P0-10 on the tape label);
+    - the owner should compare the text on image 2 with the real product letter by letter;
+    - a clear recommendation: if any text on image 2 differs, do not use image 2.
+  - `printed_text` false → image 2 is preselected.
 
 ## Corrections in the fast track
 The reply to a preview is classified (`classify_reply` prompt, strict JSON, no tools):
@@ -86,7 +96,7 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 | --- | --- |
 | `core` | `JobState` gets `SAVED_HIDDEN` and `CANCELLED`. `Job` gets the collected facts (each with its quote), versions, and the ids of sent emails. `state_machine.py` holds the table above and refuses any other transition. `job_store.py` on Firestore. |
 | `channels` | `fetch_message` returns the full `ChannelMessage` (text and attachments). `OutboundMessage` gets inline images. Reply templates: `received`, `needs_info`, `ready_for_approval`, `saved_hidden`, `failed`, `cancelled`. |
-| `intake` | `parse_request(message) -> ProductRequest`: runs `extract_request`, checks every quote appears in the email, and applies the attachment guard (image types and size limits from `store.yaml`). |
+| `intake` | `parse_request(message) -> list[ProductRequest]`: runs `extract_request` v2 (adds the photos, one item per product, photo assignment by what the owner wrote, and `printed_text`), checks every quote appears in the email, and applies the attachment guard (image types and size limits from `store.yaml`). |
 | `content` | `write_listing(facts) -> ListingText`: the two prompts, the checks from the P0-10 bake-off (fact ids, numbers, voice), and the HTML render from the playbook sections with an allowlist sanitizer. |
 | `images` | unchanged (`generator`, `postprocess`). |
 | `agent_runtime` | `classify_reply(message, job) -> ReplyClass`. |
@@ -110,6 +120,7 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 6. A forged sender gets no reply and opens no job.
 9. One email with two clearly separated products opens two jobs with two preview threads. Approving one does not touch the other.
 10. One email with two products and one price that could belong to either opens no job and gets one clarifying question.
+11. A product whose photo shows printed text gets a preview with image 1 preselected and the printed-text warning; replying "תמונה 2" switches the image and creates a new version.
 7. A job forced past the time limit ends `FAILED`, and both owner and developer are told.
 8. The cost recorded for one full job is below the per-job cap, and is reported in the live-run report.
 
@@ -117,4 +128,4 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 1. The states and the required/optional list above.
 2. Fast-track gaps: no category, main image only, wording corrections forwarded to the developer. (Several products per email are supported: DEV, 14.11.2026.)
 3. Job ids: `YTS-1001` and up (decided 14.11.2026).
-4. The owner marks printed packaging in the email (a phrase to agree with the client), or every photo with packaging is treated as a product photo to regenerate from. The first is safer.
+4. Printed text: decided as described under Images (two options always, `printed_text` from the extraction call, explicit warning and recommendation).
