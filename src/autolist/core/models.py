@@ -150,6 +150,16 @@ class AgentConfig(_Strict):
     developer_contact: str | None  # shown to the owner in receipts; gets failure alerts
 
 
+class IntakeConfig(_Strict):
+    """Limits on what an owner email may carry (attachment guard)."""
+
+    image_types: list[Literal["image/jpeg", "image/png", "image/webp"]] = Field(min_length=1)
+    max_attachments: int = Field(gt=0)
+    max_attachment_bytes: int = Field(gt=0)
+    max_image_pixels: int = Field(gt=0)  # refuses decompression bombs before decoding
+    llm_image_max_edge_px: int = Field(gt=0)  # photos are downscaled before an LLM sees them
+
+
 class DeployConfig(_Strict):
     stage: Literal["dev", "prod"]  # prod refuses secrets labelled stage=dev (infra/SPEC.md)
 
@@ -165,6 +175,7 @@ class StoreConfig(_Strict):
     images: ImagesConfig
     publishing: PublishingConfig
     agent: AgentConfig
+    intake: IntakeConfig
     deploy: DeployConfig
 
     def require(self, path: str) -> Any:
@@ -394,6 +405,29 @@ class Job(_Strict):
         """The latest fact for ``key`` (a reply overrides the original email)."""
         found = [f for f in self.facts if f.key == key]
         return found[-1] if found else None
+
+
+# ---------------------------------------------------------------- intake
+
+
+class ProductRequest(_Strict):
+    """One product from an owner email: quoted facts, its photos, and what is missing."""
+
+    index: int = Field(ge=0)
+    facts: list[JobFact]
+    photo_indexes: list[int]  # 1-based positions in the email's accepted image list
+    printed_text: bool | None
+    missing_required: list[str]  # required detail keys with no fact (playbook list)
+    unverified_fields: list[str]  # values the model gave without an exact quote: dropped, asked
+
+
+class ParsedRequest(_Strict):
+    items: list[ProductRequest]
+    clearly_separated: bool
+    unassigned_photos: list[int]
+    questions: list[str]  # Hebrew, from the model plus the parser's own
+    rejected_attachments: list[str]  # file names refused by the guard, with the reason
+    accepted_images: list[ReferenceImage]  # the guarded, downscaled photos, in index order
 
 
 # ---------------------------------------------------------------- channels

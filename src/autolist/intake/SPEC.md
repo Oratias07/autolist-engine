@@ -1,34 +1,75 @@
 ---
 module: intake
-status: not-started      # written by Claude Code at the start of phase 3, approved by DEV before code
-phase: 3
+status: approved         # fast-track scope (single email, one or more products), from docs/fast-track-pipeline.md (PR #39, DEV 14.11.2026). Invoices (xls/xlsx/csv/pdf) stay phase 3.
+approved_by: DEV (Or)
+approved_at: 2026-11-14
+phase: 1 (fast track), 3 (invoices)
 ---
 
 # intake
 
 ## Purpose
-Turns a `ChannelMessage` into structured requests: a single-product request, or invoice rows (xls/xlsx/csv/pdf, with images per row). It strips sensitive invoice data (FOB cost, supplier name, bank details) before any LLM call. Missing fields stay None.
+Turns a `ChannelMessage` from the owner into products with quoted facts. It also guards the attachments. Missing values stay missing: they are listed, never filled.
 
-## Planned files
-request_parser.py, invoice_parser.py, invoice_images.py, attachment_guard.py
+## Files
+| File | Phase | Does |
+| --- | --- | --- |
+| `attachment_guard.py` | 1 | Decides which attachments are usable photos and prepares them. |
+| `request_parser.py` | 1 | Runs `extract_request` v2 and checks its output. |
+| `invoice_parser.py`, `invoice_images.py` | 3 | Supplier invoices. |
 
 ## Inputs
-TBD in this SPEC before code.
+`parse_request(message, *, llm, intake, required, job_id) -> ParsedRequest`
+- `message`: `ChannelMessage` (already sender-verified by `channels`).
+- `intake`: `IntakeConfig` (`store.yaml` → `intake`).
+- `required`: required detail keys from the playbook (`listing.required`). Not in code.
 
 ## Outputs
-TBD.
+`ParsedRequest` (core):
+- the products, one `ProductRequest` each: quoted facts, photo indexes, `printed_text`, missing required keys, and unverified fields
+- whether the products are clearly separated
+- unassigned photos
+- the model's questions
+- rejected attachments (name and reason)
+- the accepted photos
+
+## Security (end to end)
+- **Email text, file names and image content are untrusted.** Text and names go into the prompt inside `<untrusted>` tags, photos as image blocks. The prompt states that text inside a photo is data.
+- **The model's output is checked, not trusted:**
+  - A value without an exact quote of the email text is dropped and reported in `unverified_fields`.
+  - A photo index outside the accepted list is dropped.
+  - Missing required details come from the playbook list, not from the model.
+- **Attachments are checked by decoding, not by the declared MIME type:**
+  - type, size and count limits come from `store.yaml`;
+  - the pixel count is checked from the header before decoding (decompression bombs);
+  - accepted photos are re-encoded, which strips EXIF and anything appended to the file, and downscaled to `intake.llm_image_max_edge_px`.
+- **File names** are reduced to a display-only form: no path, no markup characters, at most 80 characters.
+- **No reply text in code.** Questions about dropped or missing values are rendered from the store repo's `needs_info` template.
+- **Cost:** the extraction call goes through the cost ledger. Image tokens are included in the estimate (`llm` SPEC).
 
 ## Side effects
-TBD. Default: none (pure).
+None besides the LLM call (paid, through the ledger).
 
 ## Errors
-TBD.
+`CostCapExceeded`, `LLMOutputInvalid` and `LLMUnavailable` from `llm`. A missing playbook key raises `ConfigMissing`.
 
 ## Allowed dependencies
-`autolist.core`, `autolist.llm`.
+`autolist.core`, `autolist.llm`, Pillow, pydantic.
 
 ## Not responsible for
-TBD.
+- Deciding what happens with missing details (orchestrator).
+- Wording questions to the owner (store repo templates).
+- Fetching the email (`channels`).
 
 ## Acceptance criteria
-Taken from the phase file in the store repo, then refined here.
+**Unit (fake LLM, synthetic images):**
+1. Quoted facts are kept.
+2. An unquoted value is dropped and listed.
+3. Missing required keys include "photo" when there is no photo.
+4. Out-of-range photo indexes are dropped.
+5. A declared image type that does not decode is refused.
+6. The pixel limit is checked before decoding.
+7. EXIF is stripped.
+8. File names are sanitized.
+
+**Live:** the P0-07 email samples plus new fast-track cases are re-run with v2 through the `live` workflow, within the phase-0 Anthropic budget. The cases are: two products with photos, a shared price that cannot be assigned, a photo with printed text, and an injection inside an image.

@@ -7,7 +7,10 @@ call the model (no tools) -> validate JSON when a schema is given (one repair at
 
 from __future__ import annotations
 
+import base64
+import io
 import json
+import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -16,12 +19,13 @@ from pathlib import Path
 from typing import Any, Literal, Protocol
 
 import anthropic
+from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from autolist.core.cost_ledger import CostLedger
 from autolist.core.errors import ConfigInvalid, CostCapExceeded
 from autolist.core.logging import get_logger, register_secret
-from autolist.core.models import CostEntry, StoreConfig
+from autolist.core.models import CostEntry, ReferenceImage, StoreConfig
 from autolist.llm.errors import LLMOutputInvalid, LLMUnavailable
 from autolist.llm.prompt_loader import load_prompt, render
 
@@ -43,6 +47,9 @@ class LLMRequest(BaseModel):
     model_role: ModelRole
     job_id: str | None
     max_output_tokens: int = Field(gt=0)
+    # images shown to the model after the prompt text, in order. Untrusted data, like the text
+    # variables; the caller has already checked type, size and pixel count (intake guard).
+    images: list[ReferenceImage] = Field(default_factory=list)
 
 
 class LLMResult(BaseModel):
@@ -145,7 +152,10 @@ class AnthropicClient:
                 load_prompt(JSON_OUTPUT_PROMPT, self._prompts_dir), {"schema": schema_json}
             )
 
-        messages: list[dict[str, str]] = [{"role": "user", "content": text}]
+        content: str | list[dict[str, Any]] = text
+        if req.images:
+            content = [{"type": "text", "text": text}, *(_image_block(i) for i in req.images)]
+        messages: list[dict[str, Any]] = [{"role": "user", "content": content}]
         reply, used_in, used_out = self._call(req, model, prices, messages)
         if req.output_schema is None:
             return LLMResult(
@@ -198,10 +208,11 @@ class AnthropicClient:
         req: LLMRequest,
         model: str,
         prices: _Prices,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
     ) -> tuple[str, int, int]:
-        # Conservative estimate: UTF-8 bytes >= tokens for any text, plus the full output budget.
-        est_in = sum(len(m["content"].encode("utf-8")) for m in messages)
+        # Conservative estimate: UTF-8 bytes >= tokens for any text, plus the full output budget,
+        # plus image tokens by the provider's documented formula (real usage is what is recorded).
+        est_in = sum(_estimate_tokens(m["content"]) for m in messages)
         estimate = _usd(prices, est_in, req.max_output_tokens)
         decision = self._ledger.authorize(req.job_id, "anthropic", req.prompt, estimate)
         if not decision.allowed:
@@ -259,3 +270,32 @@ class AnthropicClient:
             return float(value) if value is not None else None
         except ValueError:
             return None
+
+
+def _image_block(image: ReferenceImage) -> dict[str, Any]:
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": image.mime_type,
+            "data": base64.b64encode(image.data).decode("ascii"),
+        },
+    }
+
+
+def _image_tokens(data: bytes) -> int:
+    # Anthropic vision docs: tokens ~= width * height / 750 (images are sent already downscaled).
+    with Image.open(io.BytesIO(data)) as im:
+        return math.ceil(im.width * im.height / 750)
+
+
+def _estimate_tokens(content: str | list[dict[str, Any]]) -> int:
+    if isinstance(content, str):
+        return len(content.encode("utf-8"))
+    total = 0
+    for block in content:
+        if block["type"] == "text":
+            total += len(block["text"].encode("utf-8"))
+        elif block["type"] == "image":
+            total += _image_tokens(base64.b64decode(block["source"]["data"]))
+    return total
