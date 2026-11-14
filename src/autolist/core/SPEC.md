@@ -176,3 +176,20 @@ These record how the approved behavior was implemented. No behavior was added.
   - the GCS adapter is covered with a fake storage client (put, IAM-signed V4 URL, delete)
   - a TTL above 3600 is refused
   - a missing bucket raises `ConfigMissing`
+
+## Amendment (2026-11-14, approved with `docs/fast-track-pipeline.md`, PR #39): jobs
+- **`JobState`** gets `SAVED_HIDDEN` and `CANCELLED`.
+- **`Job`** gets: the job number, source email and thread, product index, the job's own thread, `JobFact` list (each with its exact quote), `printed_text`, `JobVersion` list (approval binds to a version's preview Message-ID), sent message ids, and `active_since` for the watchdog.
+- **`state_machine.py`:**
+  - the transition table from the design;
+  - `transition()` raises `IllegalTransition` for anything else, and for FAILED without a reason;
+  - `ACTIVE`, `WAITING` and `FINAL` sets.
+- **`job_store.py`:**
+  - the `JobStore` protocol, with in-memory and Firestore implementations;
+  - the thread index `job_threads`, and the counter `counters/jobs` (starts at `agent.first_job_number`);
+  - `new_job()`.
+
+**Acceptance:**
+- both stores pass the same tests;
+- final states have no exits;
+- only PUBLISHING reaches SAVED_HIDDEN.

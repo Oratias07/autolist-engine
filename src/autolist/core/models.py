@@ -330,10 +330,9 @@ class ProductDraft(_Strict):
 
 
 class JobState(StrEnum):
-    """States named in the project doc (pipeline text + state diagram).
+    """Job states. Transitions are in ``core.state_machine`` (fast-track design, 14.11.2026).
 
-    The full transition table and any missing states (e.g. a cancelled state for the
-    ``cancel`` tool) are defined in the phase-1 state_machine SPEC.
+    RESEARCHING, REVISING, APPROVED and PUBLISHED stay defined and unused until their phases.
     """
 
     RECEIVED = "RECEIVED"
@@ -344,27 +343,57 @@ class JobState(StrEnum):
     REVISING = "REVISING"
     APPROVED = "APPROVED"
     PUBLISHING = "PUBLISHING"
+    SAVED_HIDDEN = "SAVED_HIDDEN"
     PUBLISHED = "PUBLISHED"
+    CANCELLED = "CANCELLED"
     FAILED = "FAILED"
     EXPIRED = "EXPIRED"
 
 
-class Job(BaseModel):
-    """Phase-0 skeleton; persisted fields follow the project doc's job record."""
+class JobFact(_Strict):
+    """One fact about the product, with the exact words it came from."""
 
-    model_config = ConfigDict(extra="forbid")
+    key: str  # e.g. "price", "quantity", "model", "name"
+    value: str
+    quote: str  # exact substring of the source text
+    source: Literal["email", "reply"]
+    gmail_id: str
 
-    job_id: str
-    email_message_id: str
-    thread_id: str
+
+class JobVersion(_Strict):
+    """One preview the owner was shown. Approval binds to a version's preview email."""
+
+    number: int = Field(gt=0)
+    created_at: datetime
+    title: str
+    description_html: str
+    image_choice: Literal[1, 2]
+    preview_rfc_message_id: str | None  # Message-ID of the preview email, set once sent
+
+
+class Job(_Strict):
+    job_id: str  # e.g. "YTS-1001"
+    number: int = Field(gt=0)
     state: JobState
-    version: int = Field(ge=0)
-    revision_count: int = Field(ge=0)
-    istores_product_id: int | None
-    cost_usd: Decimal = Field(ge=0)
+    source_gmail_id: str  # the owner's email that opened the job
+    source_thread_id: str
+    product_index: int = Field(ge=0)  # position of this product in that email
+    thread_id: str | None  # the job's own thread, set when the agent opens it
+    facts: list[JobFact] = Field(default_factory=list)
+    printed_text: bool | None = None
+    versions: list[JobVersion] = Field(default_factory=list)
+    revision_count: int = Field(default=0, ge=0)
+    istores_product_id: int | None = None
+    sent_messages: list[str] = Field(default_factory=list)  # gmail ids of agent emails
     created_at: datetime
     updated_at: datetime
-    error: str | None
+    active_since: datetime | None = None  # start of the current active step (watchdog)
+    error: str | None = None
+
+    def fact(self, key: str) -> JobFact | None:
+        """The latest fact for ``key`` (a reply overrides the original email)."""
+        found = [f for f in self.facts if f.key == key]
+        return found[-1] if found else None
 
 
 # ---------------------------------------------------------------- channels
