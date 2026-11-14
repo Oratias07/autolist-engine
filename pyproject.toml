@@ -16,6 +16,9 @@ dependencies = [
   "google-api-python-client",
   "google-auth",
   "pillow",
+  "starlette>=1.10.0",
+  "uvicorn>=0.54.0",
+  "google-cloud-tasks>=2.26.0",
 ]
 
 [dependency-groups]
@@ -29,6 +32,7 @@ dev = [
   "types-PyYAML",
   "import-linter",
   "pip-audit",
+  "httpx>=0.28.1",
 ]
 
 [build-system]
