@@ -56,6 +56,10 @@ async def main() -> None:
             pid = item["id"]
             title = json.loads((store / item["title_json"]).read_text(encoding="utf-8"))["title"]
             body = (store / item["description_html"]).read_text(encoding="utf-8")
+            # spelling decided after the texts were generated; applied as plain replacement,
+            # so no paid call is needed (manifest `replacements`)
+            for old, new in (manifest.get("replacements") or {}).items():
+                title, body = title.replace(old, new), body.replace(old, new)
             image = (store / item["main_image"]).read_bytes()
             if item["postprocess"]:
                 image = postprocess(image, cfg.images.output_px)
