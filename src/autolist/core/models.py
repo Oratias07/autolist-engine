@@ -144,6 +144,8 @@ class AgentConfig(_Strict):
     reminder_after_days: int = Field(gt=0)
     expire_after_days: int = Field(gt=0)
     approval_token_ttl_hours: int = Field(gt=0)
+    job_id_prefix: str = Field(min_length=1)  # e.g. "YTS-"
+    first_job_number: int = Field(gt=0)
     job_step_timeout_s: int = Field(gt=0, le=3000)  # active work limit per job step
     developer_contact: str | None  # shown to the owner in receipts; gets failure alerts
 
