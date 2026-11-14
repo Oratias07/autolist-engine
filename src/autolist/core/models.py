@@ -144,6 +144,12 @@ class AgentConfig(_Strict):
     reminder_after_days: int = Field(gt=0)
     expire_after_days: int = Field(gt=0)
     approval_token_ttl_hours: int = Field(gt=0)
+    job_step_timeout_s: int = Field(gt=0, le=3000)  # active work limit per job step
+    developer_contact: str | None  # shown to the owner in receipts; gets failure alerts
+
+
+class DeployConfig(_Strict):
+    stage: Literal["dev", "prod"]  # prod refuses secrets labelled stage=dev (infra/SPEC.md)
 
 
 class StoreConfig(_Strict):
@@ -157,6 +163,7 @@ class StoreConfig(_Strict):
     images: ImagesConfig
     publishing: PublishingConfig
     agent: AgentConfig
+    deploy: DeployConfig
 
     def require(self, path: str) -> Any:
         """Return the value at a dotted path; raise ``ConfigMissing`` if it is null."""
