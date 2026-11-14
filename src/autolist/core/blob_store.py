@@ -58,7 +58,11 @@ class GcsBlobStore:
             import google.auth
             from google.cloud import storage  # type: ignore[attr-defined]
 
-            credentials, _ = google.auth.default()
+            # explicit scope: refreshing impersonated (WIF) credentials without one is refused
+            # with INVALID_ARGUMENT (observed, live run 43610951196)
+            credentials, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
             client = storage.Client(project=config.gcp.project_id, credentials=credentials)
         self._client = client
         self._credentials = credentials
