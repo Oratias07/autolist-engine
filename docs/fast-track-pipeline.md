@@ -9,10 +9,10 @@ proposed_at: 2026-11-14
 This design touches several modules at once (`core`, `channels`, `intake`, `content`, `images`, `agent_runtime`, `review`, `publish`, `orchestrator`). CLAUDE.md asks to stop before such a change, so it is proposed here as one piece.
 
 ## What the owner experiences
-1. The owner sends one email to the agent mailbox: one product, with at least one photo attached.
-2. Within seconds he gets a receipt: job number, "a preview follows within N minutes", and whom to contact if it does not.
+1. The owner sends one email to the agent mailbox, with one product or several. Every product needs at least one photo attached.
+2. Within seconds he gets a receipt in the same thread: one job number per product, "a preview follows within N minutes", and whom to contact if it does not.
 3. If a required detail is missing, he gets one email with numbered questions. Required questions come first. Optional ones are listed separately and marked "optional".
-4. He gets a preview email: name, description, specification, price, quantity, model, the main image, and a version number. It says: reply "מאשר", or write what to change.
+4. For each product he gets a preview email in its own thread: name, description, specification, price, quantity, model, the main image, and a version number. It says: reply "מאשר", or write what to change.
 5. He replies "מאשר". The product is created in the store, hidden and disabled, and verified. He gets a confirmation with the store's product id.
 
 ## States
@@ -34,8 +34,15 @@ New states are marked. Waiting states cost no server time.
 
 ## One email, one task
 - Every accepted email is one Cloud Tasks task, and one task runs one step.
-- **Thread → job:** the Gmail thread id is the key. A new thread opens a job. A reply in a thread continues that thread's job.
-- **Job number:** a counter in Firestore. The first number is `agent.first_job_number` in `store.yaml` (to be given by DEV; not guessed).
+- **Several products in one email (DEV, 14.11.2026):**
+  - The extraction returns one item per product (tested in P0-07 with two products in one email).
+  - Each product becomes its own job, with its own number, cost cap and version history.
+  - The receipt, in the owner's original thread, lists every job number with the product it belongs to.
+  - From then on each job talks in its own thread, which the agent opens with the subject `[<job id>] <product name> – <state>`. A reply in that thread belongs to that job, so "מאשר" can never approve the wrong product.
+  - If the email does not separate the products clearly (which price, quantity or photo belongs to which product), no job is opened. The agent asks one clarifying question in the original thread.
+  - Photos are matched to products only by what the owner states (file name or order written in the email). An unmatched photo becomes a question, not a guess.
+- **Thread → job:** the Gmail thread id is the key. A reply in a job's thread continues that job.
+- **Job id:** the prefix `agent.job_id_prefix` and a counter in Firestore that starts at `agent.first_job_number`. DEV (14.11.2026) left the choice to the implementer: `YTS-1001`, matching the subject format already in `docs/voice.md`.
 - **A reply in a thread whose job is final** gets `out_of_scope` with one line: send a new email for a new product.
 
 ## Required and optional details (store open question #34)
@@ -47,7 +54,7 @@ The list lives in the store repo's playbook, not in code. Proposed content:
 | Price | required | email |
 | Stock quantity | required | email |
 | Model name | required | email (playbook rule from 30.10) |
-| At least one photo | required | attachment |
+| At least one photo | required (DEV: may become optional later) | attachment |
 | Barcode, sale price, keywords | optional | email |
 | Anything the text prompts return as open points | optional | – |
 
@@ -57,7 +64,6 @@ The list lives in the store repo's playbook, not in code. Proposed content:
 ## Known gaps of the fast track (stated to the owner in the preview)
 - **Category is not set.** The write shape of the category field was never observed (CLAUDE.md rule 6). The owner sets it in the store's admin until it is observed and added.
 - **Only the main image is saved.** Extra images depend on P1-02 (observe the `images` write shape). Until then no lifestyle image is generated, so no money is spent on an image that cannot be saved.
-- **One product per email.** An email with several products gets a reply asking to send them one by one.
 - **No web research.** The description uses only what the owner wrote and what the photo shows on a printed label is not read.
 - **Packaging rule:** the owner marks in the email if the photo shows printed packaging (the playbook's packaging guard). Then the photo itself is processed (square, white padding) and no image is generated. Otherwise a main image is generated from the photo.
 
@@ -102,11 +108,13 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 4. A fact correction ("המחיר 450") produces version 2 with only the price changed.
 5. A wording request gets the "not supported yet" reply, and the developer contact is told.
 6. A forged sender gets no reply and opens no job.
+9. One email with two clearly separated products opens two jobs with two preview threads. Approving one does not touch the other.
+10. One email with two products and one price that could belong to either opens no job and gets one clarifying question.
 7. A job forced past the time limit ends `FAILED`, and both owner and developer are told.
 8. The cost recorded for one full job is below the per-job cap, and is reported in the live-run report.
 
 ## Decisions needed from DEV
 1. The states and the required/optional list above.
-2. Fast-track gaps: no category, main image only, one product per email, wording corrections forwarded to the developer.
-3. `agent.first_job_number`.
+2. Fast-track gaps: no category, main image only, wording corrections forwarded to the developer. (Several products per email are supported: DEV, 14.11.2026.)
+3. Job ids: `YTS-1001` and up (decided 14.11.2026).
 4. The owner marks printed packaging in the email (a phrase to agree with the client), or every photo with packaging is treated as a product photo to regenerate from. The first is safer.
