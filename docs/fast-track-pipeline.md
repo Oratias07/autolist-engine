@@ -67,7 +67,9 @@ The list lives in the store repo's playbook, not in code. Proposed content:
 - **Only the main image is saved.** Extra images depend on P1-02 (observe the `images` write shape). Until then no lifestyle image is generated, so no money is spent on an image that cannot be saved.
 - **No web research.** The description uses only what the owner wrote and what the photo shows on a printed label is not read.
 - **Images: two options, always (DEV, 14.11.2026).**
-  - Every preview shows image 1 (the owner's photo after postprocess: square, white padding, no model, no cost) and image 2 (generated). The owner can reply "תמונה 1" or "תמונה 2".
+  - Two options always exist: image 1 (the owner's photo after postprocess: square, white padding, no model, no cost) and image 2 (generated). The owner can reply "תמונה 1" or "תמונה 2".
+  - **What the preview shows (DEV, 14.11.2026):** without printed text, only image 2, with one line offering "תמונה 1" (his own photo, which he already has). With printed text, both side by side, so the text can be compared.
+  - **Nothing is stored for this.** The original stays only in the owner's email in the agent mailbox; image 1 is processed in memory when needed. An image goes to the bucket only when it is the one being uploaded, and the bucket deletes it after one day.
   - **Which one is preselected** comes from one extra field in the existing extraction call (Haiku, it already runs on every email): `printed_text` per product, true when the photo shows printed text or a label on the product or its packaging. There is no separate check per image.
   - The writing prompts never see the image, so the description cannot take facts from it.
   - `printed_text` true → image 1 is preselected, and the preview states, in plain words:
