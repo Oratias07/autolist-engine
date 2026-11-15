@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from autolist.core.facts import owner_details
 from autolist.core.models import (
     ChannelMessage,
     IntakeConfig,
@@ -43,6 +44,8 @@ class ExtractedItem(_M):
     model: Quoted[str]
     keywords: Quoted[list[str]]
     category_hint: Quoted[str]
+    item_code: Quoted[str]
+    details: list[Quoted[str]] = Field(description="other stated product facts, one per item")
     photo_indexes: list[int] = Field(description="1-based positions in the attachments list")
     printed_text: bool | None
 
@@ -63,6 +66,7 @@ _FIELDS = (
     "model",
     "keywords",
     "category_hint",
+    "item_code",
 )
 
 
@@ -121,6 +125,7 @@ def parse_request(
                     gmail_id=message.message_id,
                 )
             )
+        facts += owner_details(item.details, message, "email")
         photos = sorted({p for p in item.photo_indexes if p in valid_photos})
         have = {f.key for f in facts} | ({"photo"} if photos else set())
         items.append(

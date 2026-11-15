@@ -19,12 +19,14 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from autolist.content.sanitizer import sanitize
+from autolist.core.facts import DETAIL
 from autolist.core.models import JobFact, ListingText
 from autolist.llm.client import LLMClient, LLMRequest
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 _EMOJI = re.compile("[\U0001f300-\U0001faff☀-➿]")
-# facts the writer sees; price, quantity and category are never part of the text
+# facts the writer sees, plus every owner detail; price, quantity, category and the item code
+# are never part of the text
 WRITER_KEYS = ("name", "model", "barcode", "keywords")
 TITLE_TOKENS = 1000
 DESCRIPTION_TOKENS = 6000
@@ -61,13 +63,12 @@ class DescriptionOut(_M):
 
 
 def writer_facts(facts: list[JobFact]) -> list[dict[str, str]]:
-    """Latest fact per key, numbered F1.. in a fixed order."""
+    """Latest fact per key, then every owner detail in order (once each), numbered F1.."""
     latest: dict[str, JobFact] = {f.key: f for f in facts}
-    out: list[dict[str, str]] = []
-    for key in WRITER_KEYS:
-        if key in latest:
-            out.append({"id": f"F{len(out) + 1}", "text": f"{key}: {latest[key].value}"})
-    return out
+    texts = [f"{key}: {latest[key].value}" for key in WRITER_KEYS if key in latest]
+    details = list(dict.fromkeys(f.value for f in facts if f.key == DETAIL))
+    texts += [f"detail: {d}" for d in details]
+    return [{"id": f"F{i}", "text": t} for i, t in enumerate(texts, 1)]
 
 
 def _numbers(text: str) -> set[str]:

@@ -51,6 +51,7 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
     except (InvalidOperation, ValueError) as exc:
         raise RuntimeError(f"{job.job_id}: price or quantity is not a number") from exc
     barcode = job.fact("barcode")
+    item_code = job.fact("item_code")
     ref = rt.blobs.put(f"{job.job_id}/v{version.number}-main.jpg", image, "image/jpeg")
     return ProductDraft(
         job_id=job.job_id,
@@ -58,7 +59,7 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
         description_html=version.description_html,
         price=price,
         quantity=quantity,
-        sku=None,  # decision 15.11.2026: the item code is not known in the fast track
+        sku=item_code.value if item_code else None,  # B-03; None: not sent (decision 15.11)
         model=_fact(job, "model"),
         upc=barcode.value if barcode else None,
         main_image=ref,

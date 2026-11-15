@@ -145,3 +145,14 @@ async def test_facts_while_generating_get_status() -> None:
     rig.jobs.save(job)
     out = await _reply(rig, "המחיר 480", classified("facts", price=q("480", "480")))
     assert out["reply"] == "status"
+
+
+async def test_owner_details_in_a_reply_rewrite_the_text_not_the_images() -> None:
+    rig = await _ready()
+    detail = {"value": "לכל סוגי המשטחים", "quote": "לכל סוגי המשטחים"}
+    out = await _reply(rig, "מיועדת לכל סוגי המשטחים", classified("facts", details=[detail]))
+    assert out["reply"] == "new_version"
+    job = _job(rig)
+    assert [f.value for f in job.facts if f.key == "detail"] == ["לכל סוגי המשטחים"]
+    assert rig.llm.prompts.count("write_description") == 2
+    assert len(rig.images.requests) == 1

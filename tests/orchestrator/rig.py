@@ -55,6 +55,8 @@ LABELS = {
     "category_hint": "קטגוריה",
     "photo": "תמונה",
     "sku": "sku-label",
+    "item_code": "item-code-label",
+    "detail": "detail-label",
     "_none": "אין",
 }
 STATES = {
@@ -138,6 +140,8 @@ def item(**over: Any) -> dict[str, Any]:
         "model": q("C1", "C1"),
         "keywords": q(),
         "category_hint": q(),
+        "item_code": q(),
+        "details": [],
         "photo_indexes": [1],
         "printed_text": False,
     }
@@ -162,6 +166,8 @@ def extraction(items: list[dict[str, Any]], **over: Any) -> dict[str, Any]:
 def classified(intent: str, question: str = "", also: bool = False, **facts: Any) -> dict[str, Any]:
     base = {k: q() for k in ("name", "price", "sale_price", "quantity", "model", "barcode")}
     base["keywords"] = q()
+    base["item_code"] = q()
+    base["details"] = []
     base.update(facts)
     return {"intent": intent, "facts": base, "also_wording_or_image": also, "question": question}
 
