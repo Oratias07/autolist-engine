@@ -194,10 +194,12 @@ class FakeLLM:
         self.extract, self.title = extract, title
         self.classify: dict[str, Any] = classified("unclear")
         self.prompts: list[str] = []
+        self.requests: list[LLMRequest] = []
         self.error: Exception | None = None
 
     def complete(self, req: LLMRequest) -> LLMResult:
         self.prompts.append(req.prompt)
+        self.requests.append(req)
         if self.error and req.prompt != "extract_request":
             raise self.error
         parsed: Any = {
@@ -390,3 +392,23 @@ class _MessagesById(FakeGmail):
         rfc = "<" + str(kw["q"]).split("rfc822msgid:")[1].split(" ")[0] + ">"
         found = [{"id": k} for k, m in self._messages.items() if m.get("rfc") == rfc]
         return Call({"messages": found}, self.calls, "list")
+
+    def threads(self) -> _Threads:
+        return _Threads(self._messages)
+
+
+class _Threads:
+    """``threads().get(id=...)``: the stored messages of that thread, in insertion order."""
+
+    def __init__(self, messages: dict[str, dict[str, Any]]) -> None:
+        self._messages = messages
+
+    def get(self, **kw: Any) -> Any:
+        from tests.channels.conftest import Call
+
+        found = [
+            {"id": k, "labelIds": m.get("labelIds", ["INBOX"])}
+            for k, m in self._messages.items()
+            if m.get("threadId") == kw["id"]
+        ]
+        return Call({"messages": found}, [], "threads.get")
