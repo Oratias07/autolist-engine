@@ -11,7 +11,9 @@ from __future__ import annotations
 import re
 from typing import Literal, cast
 
-Command = Literal["approve", "cancel", "image_1", "image_2"]
+Command = Literal[
+    "approve", "cancel", "image_1", "image_2", "lifestyle_add", "lifestyle_remove", "no_sale"
+]
 _BIDI = re.compile("[‎‏‪-‮⁦-⁩]")
 _SPACE = re.compile(r"\s+")
 

@@ -45,7 +45,9 @@ class ExtractedItem(_M):
     keywords: Quoted[list[str]]
     category_hint: Quoted[str]
     item_code: Quoted[str]
+    sale_end: Quoted[str]
     details: list[Quoted[str]] = Field(description="other stated product facts, one per item")
+    lifestyle_requested: bool
     photo_indexes: list[int] = Field(description="1-based positions in the attachments list")
     printed_text: bool | None
 
@@ -67,6 +69,7 @@ _FIELDS = (
     "keywords",
     "category_hint",
     "item_code",
+    "sale_end",
 )
 
 
@@ -134,6 +137,7 @@ def parse_request(
                 facts=facts,
                 photo_indexes=photos,
                 printed_text=item.printed_text if photos else None,
+                lifestyle_requested=item.lifestyle_requested,
                 missing_required=[r for r in required if r not in have],
                 unverified_fields=unverified,
             )

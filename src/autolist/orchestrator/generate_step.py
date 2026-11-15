@@ -8,6 +8,7 @@ to image 1) -> preview -> AWAITING_APPROVAL. A paid call that fails is not repea
 from __future__ import annotations
 
 from autolist.content.writer import write_listing
+from autolist.core.errors import ConfigMissing
 from autolist.core.logging import get_logger
 from autolist.core.models import (
     ImageRequest,
@@ -23,7 +24,16 @@ from autolist.images.postprocess import postprocess
 from autolist.intake.attachment_guard import guard
 from autolist.orchestrator.category_step import choose_for
 from autolist.orchestrator.intake_step import read
-from autolist.orchestrator.runtime import Runtime, alert_developer, category_text, send
+from autolist.orchestrator.runtime import (
+    Runtime,
+    alert_developer,
+    category_text,
+    lifestyle_text,
+    product_name,
+    sale_text,
+    send,
+    to_owner,
+)
 from autolist.review.preview import build_preview
 
 log = get_logger(__name__)
@@ -70,6 +80,65 @@ def _image_2(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> bytes | Non
     return postprocess(img.data, px)
 
 
+def scene_rules(playbook: dict[str, object]) -> str:
+    """The lifestyle scene rules, from the playbook (``images``)."""
+    images = playbook.get("images")
+    if not isinstance(images, dict) or "lifestyle_people" not in images:
+        raise ConfigMissing("playbook images.lifestyle_people")
+    rules = ["- A realistic office setting."]
+    if images["lifestyle_people"] is False:
+        rules.append("- No people and no parts of people (hands included).")
+    if images.get("added_text_or_logo") == "forbidden":
+        rules.append("- Add no text, logo, label or price.")
+    return "\n".join(rules)
+
+
+def lifestyle_image(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> bytes | None:
+    """The lifestyle image the owner asked for (DEV 15.11.2026), or None when it failed."""
+    facts = "\n".join(
+        f"{f.key}: {f.value}" for f in job.facts if f.key in ("name", "model", "detail")
+    )
+    try:
+        img = rt.images.generate(
+            ImageRequest(
+                job_id=job.job_id,
+                model=rt.config.require("images.model"),
+                role="lifestyle",
+                prompt_name="image_lifestyle",
+                variables={
+                    "product_facts": facts,
+                    "reference_notes": "-",
+                    "scene_rules": scene_rules(rt.playbook),
+                },
+                references=photos[:MAX_REFERENCES],
+            )
+        )
+    except BillingRequired as exc:
+        alert_developer(rt, job.job_id, "gemini_billing", job.state, str(exc))
+        return None
+    except ImageError as exc:
+        log.warning("lifestyle image failed", extra={"job_id": job.job_id})
+        alert_developer(rt, job.job_id, "lifestyle_failed", job.state, str(exc))
+        return None
+    px: int = rt.config.require("images.output_px")
+    return postprocess(img.data, px)
+
+
+def lifestyle_failed(rt: Runtime, job: Job, in_reply_to: str | None) -> Job:
+    _, saved = send(
+        rt,
+        to_owner(
+            "lifestyle_unavailable",
+            {"job_id": job.job_id, "product_name": product_name(job)},
+            to=rt.owner,
+            thread_id=job.thread_id,
+            in_reply_to=in_reply_to,
+        ),
+        job,
+    )
+    return saved or job
+
+
 async def generate(rt: Runtime, job: Job) -> Job:
     text: ListingText = write_listing(
         job.facts,
@@ -87,6 +156,7 @@ async def generate(rt: Runtime, job: Job) -> Job:
     px: int = rt.config.require("images.output_px")
     image_1 = postprocess(photos[0].data, px)
     image_2 = _image_2(rt, job, photos)
+    lifestyle = lifestyle_image(rt, job, photos) if job.lifestyle_requested else None
 
     version = len(job.versions) + 1
     preview = build_preview(
@@ -100,6 +170,9 @@ async def generate(rt: Runtime, job: Job) -> Job:
         to=rt.owner,
         in_reply_to=None,
         category=category_text(rt, choice.names),
+        sale=sale_text(rt, job),
+        lifestyle=lifestyle,
+        lifestyle_note=lifestyle_text(rt, lifestyle is not None),
     )
     message = preview.message.model_copy(
         update={
@@ -126,6 +199,7 @@ async def generate(rt: Runtime, job: Job) -> Job:
                     category_names=choice.names,
                     image_choice=preview.image_choice,
                     image_options=preview.image_options,
+                    lifestyle=preview.lifestyle,
                     preview_gmail_id=sent.gmail_id,
                     preview_rfc_message_id=sent.rfc_message_id,
                 ),
@@ -134,4 +208,7 @@ async def generate(rt: Runtime, job: Job) -> Job:
     )
     job = transition(job, JobState.AWAITING_APPROVAL, rt.now())
     rt.jobs.save(job)
+    if job.lifestyle_requested and lifestyle is None:
+        job = lifestyle_failed(rt, job, sent.rfc_message_id)
+        rt.jobs.save(job)
     return job

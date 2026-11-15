@@ -66,11 +66,19 @@ def load_state_labels() -> dict[str, str]:
     return _labels("state_labels.yaml")
 
 
-COMMANDS = ("approve", "cancel", "image_1", "image_2")
+COMMANDS = (
+    "approve",
+    "cancel",
+    "image_1",
+    "image_2",
+    "lifestyle_add",
+    "lifestyle_remove",
+    "no_sale",
+)
 
 
 def load_commands() -> dict[str, str]:
-    """The exact reply command words (store repo, agent/commands.yaml); all four, non-empty."""
+    """The exact reply command words (store repo, agent/commands.yaml); all of them, non-empty."""
     path = store_dir() / "agent" / "commands.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     words = data.get("commands") if isinstance(data, dict) else None

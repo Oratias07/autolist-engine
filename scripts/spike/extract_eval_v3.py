@@ -71,6 +71,8 @@ def _check(res: ParsedRequest, expect: dict[str, Any], text: str) -> list[str]:
             p.append(f"questions {res.questions} (max {want['max_questions']})")
         if "photos" in want and item.photo_indexes != want["photos"]:
             p.append(f"item {i} photos {item.photo_indexes} != {want['photos']}")
+        if "lifestyle" in want and item.lifestyle_requested != want["lifestyle"]:
+            p.append(f"item {i} lifestyle_requested {item.lifestyle_requested}")
         if "printed_text" in want and item.printed_text != want["printed_text"]:
             p.append(f"item {i} printed_text {item.printed_text} != {want['printed_text']}")
     return p
@@ -97,6 +99,9 @@ def main() -> None:
     cases += yaml.safe_load((samples / "p1-08-extract-v3.yaml").read_text(encoding="utf-8"))[
         "cases"
     ]
+    v4 = samples / "p1-10-extract-v4.yaml"
+    if v4.exists():
+        cases += yaml.safe_load(v4.read_text(encoding="utf-8"))["cases"]
     old = yaml.safe_load((samples / "p0-07-emails.yaml").read_text(encoding="utf-8"))["emails"]
     cases += [_p007(c) for c in old]
     required: list[str] = require(load_playbook(), "listing.required")

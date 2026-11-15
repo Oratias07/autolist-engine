@@ -14,12 +14,13 @@ from autolist.channels.email.own_attachment import fetch_own_attachment
 from autolist.core.facts import store_model
 from autolist.core.models import Job, JobState, ProductDraft
 from autolist.core.playbook import require
+from autolist.core.sale import sale_spec
 from autolist.core.state_machine import transition
 from autolist.images.postprocess import postprocess
 from autolist.orchestrator.generate_step import job_photos
 from autolist.orchestrator.runtime import Runtime, product_name, send, to_owner
 from autolist.publish.publisher import create_hidden
-from autolist.review.preview import IMAGE_NAMES
+from autolist.review.preview import IMAGE_NAMES, LIFESTYLE_NAME
 
 
 def _fact(job: Job, key: str) -> str:
@@ -52,7 +53,23 @@ def _image(rt: Runtime, job: Job) -> bytes:
     return postprocess(job_photos(rt, job)[0].data, px)
 
 
-def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
+def _lifestyle(rt: Runtime, job: Job) -> bytes | None:
+    """The lifestyle image of the approved version, from its own preview email."""
+    version = job.versions[-1]
+    if not version.lifestyle:
+        return None
+    if version.preview_gmail_id is None:
+        raise RuntimeError(f"{job.job_id}: lifestyle attached but the preview id is missing")
+    return fetch_own_attachment(
+        rt.gmail(),
+        version.preview_gmail_id,
+        LIFESTYLE_NAME,
+        config=rt.config.channels.email,
+        max_bytes=MAX_OUT_ATTACHMENT_BYTES,
+    )
+
+
+def draft_of(rt: Runtime, job: Job, image: bytes, lifestyle: bytes | None = None) -> ProductDraft:
     version = job.versions[-1]
     try:
         price = Decimal(_fact(job, "price"))
@@ -61,7 +78,16 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
         raise RuntimeError(f"{job.job_id}: price or quantity is not a number") from exc
     barcode = job.fact("barcode")
     item_code = job.fact("item_code")
+    try:
+        special = sale_spec(job, rt.today())  # starts on the publish day (DEV 15.11.2026)
+    except ValueError as exc:
+        raise RuntimeError(f"{job.job_id}: sale not valid at publish: {exc}") from exc
     ref = rt.blobs.put(f"{job.job_id}/v{version.number}-main.jpg", image, "image/jpeg")
+    extra = (
+        [rt.blobs.put(f"{job.job_id}/v{version.number}-lifestyle.jpg", lifestyle, "image/jpeg")]
+        if lifestyle is not None
+        else []
+    )
     return ProductDraft(
         job_id=job.job_id,
         name=version.title,
@@ -74,14 +100,15 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
         category_ids=version.category_ids,
         stock_managed=bool(require(rt.playbook, "stock.subtract")),  # DEV 15.11: always on
         main_image=ref,
-        extra_images=[],
+        extra_images=extra,
+        special=special,
     )
 
 
 async def publish(rt: Runtime, job: Job) -> Job:
     languages: list[object] = rt.config.require("istores.required_name_languages")
     page_size: int = rt.config.require("istores.catalog_page_size")
-    draft = draft_of(rt, job, _image(rt, job))
+    draft = draft_of(rt, job, _image(rt, job), _lifestyle(rt, job))
     try:
         async with rt.istores() as client:
             product_id = await create_hidden(
@@ -93,7 +120,8 @@ async def publish(rt: Runtime, job: Job) -> Job:
                 page_size=page_size,
             )
     finally:
-        rt.blobs.delete(draft.main_image)
+        for ref in [draft.main_image, *draft.extra_images]:
+            rt.blobs.delete(ref)
     job = job.model_copy(update={"istores_product_id": product_id})
     job = transition(job, JobState.SAVED_HIDDEN, rt.now())
     rt.jobs.save(job)

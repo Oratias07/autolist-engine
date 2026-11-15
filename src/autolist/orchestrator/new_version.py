@@ -19,11 +19,13 @@ from autolist.orchestrator.runtime import (
     Runtime,
     alert_developer,
     category_text,
+    lifestyle_text,
     product_name,
+    sale_text,
     send,
     to_owner,
 )
-from autolist.review.preview import IMAGE_NAMES, build_preview
+from autolist.review.preview import IMAGE_NAMES, LIFESTYLE_NAME, build_preview
 
 
 def limit_reached(rt: Runtime, job: Job, msg: ChannelMessage) -> bool:
@@ -54,7 +56,11 @@ def new_version(
     owner_choice: Literal[1, 2] | None,
     text: ListingText | None = None,
     category: CategoryChoice | None = None,
+    lifestyle: bytes | None = None,
+    drop_lifestyle: bool = False,
 ) -> Job:
+    """``lifestyle``: a new lifestyle image; else the previous one is kept, unless
+    ``drop_lifestyle`` ("בלי תמונת אווירה")."""
     latest = job.versions[-1]
     px: int = rt.config.require("images.output_px")
     image_1 = postprocess(job_photos(rt, job)[0].data, px)
@@ -68,6 +74,18 @@ def new_version(
             rt.gmail(),
             latest.preview_gmail_id,
             IMAGE_NAMES[2],
+            config=rt.config.channels.email,
+            max_bytes=MAX_OUT_ATTACHMENT_BYTES,
+        )
+    if lifestyle is None and latest.lifestyle and not drop_lifestyle:
+        if latest.preview_gmail_id is None:
+            raise RuntimeError(
+                f"{job.job_id}: the preview id of version {latest.number} is missing"
+            )
+        lifestyle = fetch_own_attachment(
+            rt.gmail(),
+            latest.preview_gmail_id,
+            LIFESTYLE_NAME,
             config=rt.config.channels.email,
             max_bytes=MAX_OUT_ATTACHMENT_BYTES,
         )
@@ -90,6 +108,9 @@ def new_version(
         to=rt.owner,
         in_reply_to=msg.rfc_message_id,
         category=category_text(rt, category.names if category else latest.category_names),
+        sale=sale_text(rt, job),
+        lifestyle=lifestyle,
+        lifestyle_note=lifestyle_text(rt, lifestyle is not None),
     )
     message = preview.message.model_copy(
         update={
@@ -114,6 +135,7 @@ def new_version(
             "image_choice": preview.image_choice,
             "owner_choice": owner_choice,
             "image_options": preview.image_options,
+            "lifestyle": preview.lifestyle,
             "preview_gmail_id": sent.gmail_id,
             "preview_rfc_message_id": sent.rfc_message_id,
         }

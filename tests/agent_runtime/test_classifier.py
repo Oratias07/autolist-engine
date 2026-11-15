@@ -19,9 +19,16 @@ def _out(intent: str = "facts", **facts: Any) -> dict[str, Any]:
     base["keywords"] = _q()
     base["item_code"] = _q()
     base["category_hint"] = _q()
+    base["sale_end"] = _q()
     base["details"] = []
     base.update(facts)
-    return {"intent": intent, "facts": base, "also_wording_or_image": False, "question": ""}
+    return {
+        "intent": intent,
+        "facts": base,
+        "also_wording_or_image": False,
+        "question": "",
+        "lifestyle_requested": False,
+    }
 
 
 class FakeLLM:
@@ -100,3 +107,19 @@ def test_details_from_an_answer_to_copied_questions() -> None:
         ("detail", 'אורך 40 מ"מ', "reply"),
         ("detail", "מיועדת לכל סוגי המשטחים", "reply"),
     ]
+
+
+def test_a_lifestyle_request_alone_is_not_unclear() -> None:
+    out = _out("facts")
+    out["lifestyle_requested"] = True
+    res, _ = _run("אפשר גם תמונת אווירה?", out)
+    assert res.intent == ReplyIntent.FACTS and res.lifestyle_requested and res.facts == []
+
+
+def test_sale_end_is_a_quoted_fact() -> None:
+    res, _ = _run(
+        "מבצע 399 עד 30.11",
+        _out(sale_price=_q("399", "מבצע 399"), sale_end=_q("30.11", "עד 30.11")),
+    )
+    assert {f.key: f.value for f in res.facts} == {"sale_price": "399", "sale_end": "30.11"}
+    assert not res.lifestyle_requested

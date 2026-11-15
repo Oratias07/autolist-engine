@@ -60,7 +60,9 @@ def _item(**over: Any) -> dict[str, Any]:
         "keywords": _q(),
         "category_hint": _q(),
         "item_code": _q(),
+        "sale_end": _q(),
         "details": [],
+        "lifestyle_requested": False,
         "photo_indexes": [1],
         "printed_text": False,
     }
@@ -179,3 +181,29 @@ def test_item_code_and_details_with_exact_quotes() -> None:
     assert ("item_code", "1571") in facts
     assert [v for k, v in facts if k == "detail"] == ['אורך 40 מ"מ', "מיועדת לכל סוגי המשטחים"]
     assert res.items[0].unverified_fields == []
+
+
+def test_sale_end_and_lifestyle_request_pass_through() -> None:
+    text = TEXT + ", מבצע 399 עד 30.11, תעשה גם תמונת אווירה"
+    res, _ = _run(
+        _out(
+            [
+                _item(
+                    sale_price=_q("399", "מבצע 399"),
+                    sale_end=_q("30.11", "עד 30.11"),
+                    lifestyle_requested=True,
+                )
+            ]
+        ),
+        _msg(text),
+    )
+    item = res.items[0]
+    facts = {f.key: f.value for f in item.facts}
+    assert (facts["sale_price"], facts["sale_end"]) == ("399", "30.11")
+    assert item.lifestyle_requested
+
+
+def test_sale_end_without_exact_quote_is_dropped() -> None:
+    res, _ = _run(_out([_item(sale_end=_q("2026-11-30", "סוף החודש"))]))
+    assert "sale_end" in res.items[0].unverified_fields
+    assert all(f.key != "sale_end" for f in res.items[0].facts)

@@ -127,3 +127,17 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
 - **An answer to a clarifying question (DEV 15.11.2026):** when the agent asked a question and opened no job (`clarify_products`, `no_product_found`, `too_many_products`), the owner's answer is read together with his earlier messages in that thread (`channels.email.thread_reader`, `intake_step.with_thread_context`). The texts are joined in order with a separator; the attachments follow in the same order, and so do the photo indexes. The job keeps every source message (`Job.more_source_gmail_ids`), so the photos are re-read the same way. Every message passes the sender, DKIM and DMARC checks again, and the agent's own messages are skipped. The owner never has to resend.
 - **A model or an item code (DEV 15.11.2026, YTS-1002):** the playbook's required key `model_or_item_code` is met by either one (`core.facts.present_keys`). When there is no model, the item code fills the store's model field, the preview and the writer's model line (`core.facts.store_model`), and the duplicate check uses it. Only when both are missing is the owner asked, once.
 - **Categories (DEV 15.11.2026):** `category_step.choose_for` reads the store list (read-only) and chooses when the text is written. The preview shows the names, or the `_category_none` fragment. A category the owner names in a reply (`category_hint`) chooses again, and the new version keeps the text and the images. The create sends `product_category` (observed in P1-02), and the verifier checks that every chosen id came back.
+- **Sale price (DEV 15.11.2026, `core/sale.py`, `sale_step.py`):**
+  - A sale exists only when the owner stated a sale price. It starts on the publish day, in the store timezone.
+  - Its end is one explicit date in the owner's words ("30.11", "30.11.26", "30/11/2026"; no year means this year). Words, two dates, an impossible date or a past date mean the end is missing.
+  - A missing end adds "תאריך סיום המבצע" to the questions. A sale price not below the price sends `sale_price_not_below`.
+  - Either one keeps the job from generating (NEEDS_INFO). While waiting for approval, it saves the facts but makes no version, and "מאשר" asks again. So a version never shows a sale that would not be sent.
+  - "בלי מבצע" removes every sale fact.
+  - On create the store gets `product_special` (P1-02 shape), and the verifier checks price and dates. A sale whose end passed between approval and publish fails the job and is never sent.
+- **Lifestyle image on request (DEV 15.11.2026):**
+  - It is made only when `lifestyle_requested`. That comes from the first email (extract v4), a free reply (classify v4) or the exact command "תמונת אווירה".
+  - It uses `image_lifestyle` with scene rules from the playbook (no people, nothing added), is attached as `image-3.jpg`, and is marked on the version.
+  - Later versions take it back from the previous preview; it is never made again. "בלי תמונת אווירה" drops it.
+  - A failure sends `lifestyle_unavailable`, and the preview says "לא נוצרה".
+  - On create it goes as `images` (create only, P1-02), and the verifier checks it is on the store CDN.
+  - Every uploaded image is deleted after the create.

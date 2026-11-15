@@ -25,6 +25,7 @@ from autolist.orchestrator.runtime import (
     send,
     to_owner,
 )
+from autolist.orchestrator.sale_step import sale_not_below, sale_questions
 
 log = get_logger(__name__)
 
@@ -145,6 +146,7 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
                 "facts": item.facts,
                 "photo_indexes": item.photo_indexes,
                 "printed_text": item.printed_text,
+                "lifestyle_requested": item.lifestyle_requested,
                 "more_source_gmail_ids": more_ids,
                 "source_subject": msg.subject,
                 "source_rfc_message_id": msg.rfc_message_id,
@@ -167,7 +169,12 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
     )
 
     for job, item in zip(jobs, items, strict=True):
-        questions = _questions(rt, item, list(parsed.questions))
+        questions = _questions(rt, item, list(parsed.questions)) + sale_questions(rt, job)
+        if sale_not_below(rt, job, None):  # opens the job's thread
+            job = transition(rt.jobs.get(job.job_id) or job, JobState.NEEDS_INFO, rt.now())
+            rt.jobs.save(job)
+            if not questions:
+                continue
         if questions:
             job = transition(job, JobState.NEEDS_INFO, rt.now())
             rt.jobs.save(job)
@@ -181,6 +188,7 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
                         "questions_list": numbered(questions),
                     },
                     to=rt.owner,
+                    thread_id=job.thread_id,
                 ),
                 job,
             )

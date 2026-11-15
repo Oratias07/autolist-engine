@@ -26,6 +26,7 @@ NOTE_OWNER_CHOICE = "image_note_owner_choice"
 # optional details that the fast-track listing actually uses; shown once if missing
 SHOWN_OPTIONAL = ("barcode", "keywords")
 IMAGE_NAMES: dict[Literal[1, 2], str] = {1: "image-1.jpg", 2: "image-2.jpg"}
+LIFESTYLE_NAME = "image-3.jpg"  # the optional lifestyle image (DEV 15.11.2026: on request)
 
 
 class PreviewError(ValueError):
@@ -50,6 +51,9 @@ def build_preview(
     to: str,
     in_reply_to: str | None,
     category: str,
+    sale: str,
+    lifestyle: bytes | None,
+    lifestyle_note: str,
 ) -> Preview:
     """``job.thread_id`` None opens the job's own thread (first agent email for the job)."""
     if text.problems:
@@ -102,14 +106,31 @@ def build_preview(
             "quantity": facts["quantity"],
             "model": facts["model"],
             "category": category,
+            "sale": sale,
+            "lifestyle_note": lifestyle_note,
             "description_text": text.description_text,
             "optional_missing": ", ".join(missing) if missing else labels["_none"],
         },
-        attachments=[_attachment(n, data[n]) for n in options],
+        attachments=[
+            *(_attachment(n, data[n]) for n in options),
+            *(
+                [
+                    Attachment(
+                        filename=LIFESTYLE_NAME,
+                        mime_type="image/jpeg",
+                        size_bytes=len(lifestyle),
+                        data=lifestyle,
+                    )
+                ]
+                if lifestyle is not None
+                else []
+            ),
+        ],
     )
     return Preview(
         message=message,
         image_note_template=note,
         image_choice=choice,
         image_options=options,
+        lifestyle=lifestyle is not None,
     )

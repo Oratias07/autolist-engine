@@ -49,10 +49,40 @@ def created_problems(payload: Any, draft: ProductDraft, language_id: int) -> lis
     got_ids = {str(k) for k in got_categories} if isinstance(got_categories, Mapping) else set()
     if {str(i) for i in draft.category_ids} - got_ids:
         problems.append(f"categories are {sorted(got_ids)}")
+    problems += _extras_problems(p, draft)
     if not _is_truthy_flag(p.get("hidden")):
         problems.append("NOT hidden")
     if not _is_falsy_flag(p.get("status")):
         problems.append("NOT disabled")
     if not str(p.get("image") or "").startswith(CDN_PREFIX):
         problems.append("image not on the store CDN")
+    return problems
+
+
+def _extras_problems(p: Mapping[str, Any], draft: ProductDraft) -> list[str]:
+    """Extra images and the sale, in the read shapes observed in P1-02."""
+    problems: list[str] = []
+    if draft.extra_images:
+        images = p.get("images")
+        items = list(images.values()) if isinstance(images, Mapping) else []
+        on_cdn = [
+            i
+            for i in items
+            if isinstance(i, Mapping) and str(i.get("image") or "").startswith(CDN_PREFIX)
+        ]
+        if len(on_cdn) < len(draft.extra_images):
+            problems.append(f"extra images: {len(on_cdn)} on the store CDN")
+    if draft.special is not None:
+        want = draft.special
+        specials = p.get("special")
+        found = [
+            s
+            for s in (specials if isinstance(specials, list) else [])
+            if isinstance(s, Mapping)
+            and _dec(s.get("price")) == want.price
+            and s.get("date_start") == want.date_start.isoformat()
+            and s.get("date_end") == want.date_end.isoformat()
+        ]
+        if not found:
+            problems.append(f"sale is {specials!r}")
     return problems

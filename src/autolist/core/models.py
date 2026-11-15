@@ -329,6 +329,14 @@ class ImageRef(_Strict):
     content_type: Literal["image/jpeg", "image/png", "image/webp"]
 
 
+class SaleSpec(_Strict):
+    """A sale price on create (`product_special`, write shape observed in P1-02)."""
+
+    price: Decimal = Field(gt=0)
+    date_start: date
+    date_end: date
+
+
 class ProductDraft(_Strict):
     """Everything the publisher needs to create one hidden, disabled product."""
 
@@ -343,7 +351,8 @@ class ProductDraft(_Strict):
     category_ids: list[int]  # product_category on create (observed in P1-02)
     stock_managed: bool  # iStores `subtract`: the store limits orders to the stock (playbook)
     main_image: ImageRef
-    extra_images: list[ImageRef]
+    extra_images: list[ImageRef]  # sent on create only: a PUT replaced the main image (P1-02)
+    special: SaleSpec | None = None
 
 
 # ---------------------------------------------------------------- jobs (skeleton)
@@ -394,6 +403,7 @@ class JobVersion(_Strict):
     image_choice: Literal[1, 2]
     owner_choice: Literal[1, 2] | None = None  # set once the owner replied "תמונה 1/2"; kept
     image_options: list[Literal[1, 2]] = Field(default_factory=list)  # attached to the preview
+    lifestyle: bool = False  # a lifestyle image (image-3.jpg) is attached to this preview
     preview_gmail_id: str | None = None  # the sent preview; image 2 is read back from it (#36)
     preview_rfc_message_id: str | None  # Message-ID of the preview email, set once sent
 
@@ -441,6 +451,7 @@ class ReplyClassification(_Strict):
     unverified_fields: list[str]  # values given without an exact quote: dropped, asked
     also_wording_or_image: bool
     question: str  # Hebrew, from the model; empty when none
+    lifestyle_requested: bool = False
 
 
 class Job(_Strict):
@@ -459,6 +470,7 @@ class Job(_Strict):
     photo_indexes: list[int] = Field(default_factory=list)  # 1-based, in the source email's
     # guarded image list (re-derived from the email when needed; images are not stored)
     printed_text: bool | None = None
+    lifestyle_requested: bool = False  # the owner asked for a lifestyle image (DEV 15.11.2026)
     versions: list[JobVersion] = Field(default_factory=list)
     revision_count: int = Field(default=0, ge=0)
     istores_product_id: int | None = None
@@ -484,6 +496,7 @@ class ProductRequest(_Strict):
     facts: list[JobFact]
     photo_indexes: list[int]  # 1-based positions in the email's accepted image list
     printed_text: bool | None
+    lifestyle_requested: bool = False
     missing_required: list[str]  # required detail keys with no fact (playbook list)
     unverified_fields: list[str]  # values the model gave without an exact quote: dropped, asked
 
@@ -552,6 +565,7 @@ class Preview(_Strict):
     image_note_template: str
     image_choice: Literal[1, 2]
     image_options: list[Literal[1, 2]]  # the images attached, in order
+    lifestyle: bool = False  # image-3.jpg attached
 
 
 class HealthStatus(_Strict):

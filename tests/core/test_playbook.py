@@ -65,7 +65,11 @@ def test_state_labels_and_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     agent = store / "agent"
     agent.mkdir()
     (agent / "state_labels.yaml").write_text("labels:\n  FAILED: לא הושלם\n", encoding="utf-8")
-    words = "commands:\n  approve: מאשר\n  cancel: בטל\n  image_1: תמונה 1\n  image_2: תמונה 2\n"
+    words = (
+        "commands:\n  approve: מאשר\n  cancel: בטל\n  image_1: תמונה 1\n  image_2: תמונה 2\n"
+        "  lifestyle_add: תמונת אווירה\n  lifestyle_remove: בלי תמונת אווירה\n"
+        "  no_sale: בלי מבצע\n"
+    )
     (agent / "commands.yaml").write_text(words, encoding="utf-8")
     monkeypatch.setenv("AUTOLIST_STORE_DIR", str(store))
     assert load_state_labels() == {"FAILED": "לא הושלם"}
