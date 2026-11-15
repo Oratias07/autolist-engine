@@ -9,6 +9,7 @@ from autolist.llm.errors import PromptMissing, PromptVariableError
 from autolist.llm.prompt_loader import load_prompt, parse_prompt, render, wrap_untrusted
 
 GOOD = """---
+status: approved
 name: extract_request
 version: 1
 variables: [email_text, today]
@@ -58,8 +59,8 @@ def test_case_and_spacing_variants_of_closing_tag_escaped() -> None:
     [
         "no front matter",
         "---\n- a\n---\nbody\n",
-        "---\nname: x\nstatus: not-written\n---\nbody\n",
-        "---\nname: x\n---\n<!-- only a comment -->\n",
+        "---\nstatus: approved\nname: x\nstatus: not-written\n---\nbody\n",
+        "---\nstatus: approved\nname: x\n---\n<!-- only a comment -->\n",
     ],
 )
 def test_unusable_prompts(raw: str) -> None:
@@ -69,11 +70,11 @@ def test_unusable_prompts(raw: str) -> None:
 
 def test_untrusted_must_be_declared() -> None:
     with pytest.raises(PromptVariableError):
-        parse_prompt("x", "---\nvariables: [a]\nuntrusted: [b]\n---\n{{ a }}\n")
+        parse_prompt("x", "---\nstatus: approved\nvariables: [a]\nuntrusted: [b]\n---\n{{ a }}\n")
 
 
 def test_body_referencing_undeclared_name_fails_at_render() -> None:
-    prompt = parse_prompt("x", "---\nvariables: []\n---\nHello {{ who }}\n")
+    prompt = parse_prompt("x", "---\nstatus: approved\nvariables: []\n---\nHello {{ who }}\n")
     with pytest.raises(PromptVariableError):
         render(prompt, {})
 
@@ -83,6 +84,16 @@ def test_file_lookup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         load_prompt("../secrets", tmp_path)
     with pytest.raises(PromptMissing):
         load_prompt("absent", tmp_path)
-    _write(tmp_path / "agent" / "prompts", "hello", "---\nvariables: []\n---\nHi\n")
+    _write(
+        tmp_path / "agent" / "prompts", "hello", "---\nstatus: approved\nvariables: []\n---\nHi\n"
+    )
     monkeypatch.setenv(config_mod.STORE_DIR_ENV, str(tmp_path))
     assert render(load_prompt("hello"), {}) == "Hi\n"
+
+
+def test_draft_prompt_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AUTOLIST_ALLOW_DRAFTS", raising=False)
+    with pytest.raises(PromptMissing, match="status is 'draft'"):
+        parse_prompt("x", "---\nstatus: draft\nvariables: []\n---\nHi\n")
+    with pytest.raises(PromptMissing, match="status is None"):
+        parse_prompt("x", "---\nvariables: []\n---\nHi\n")

@@ -18,6 +18,7 @@ from autolist.core.config import get_secret, load_store_config, store_dir
 from autolist.core.logging import configure_logging, get_logger
 from autolist.core.models import StoreConfig
 from autolist.core.state_store import ChannelStateStore, ProcessedMessages
+from autolist.core.text_status import ALLOW_DRAFTS_ENV, drafts_allowed
 from autolist.orchestrator.entrypoints import Deps, create_app
 from autolist.orchestrator.runtime import Runtime
 from autolist.orchestrator.tasks_queue import CloudTasksQueue, QueueTarget
@@ -148,6 +149,8 @@ def health() -> dict[str, Any]:  # pragma: no cover - live only
 
 def build_app() -> Any:  # pragma: no cover - live only
     configure_logging()
+    if drafts_allowed():
+        raise RuntimeError(f"{ALLOW_DRAFTS_ENV} is set: the service never uses draft texts")
     db = firestore()
     return create_app(
         Deps(

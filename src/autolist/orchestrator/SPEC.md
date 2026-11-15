@@ -110,3 +110,7 @@ Acceptance (tests in `tests/orchestrator/`): P1-08 cases 2, 9, 10, 12, 13, 14 an
 | `publish_step.py` | The latest version: image 1 from the owner's email (guarded, postprocessed) or image 2 from the agent's own sent preview (`fetch_own_attachment`); to the bucket for the upload only, deleted in `finally`; `create_hidden` (duplicate check, hidden + disabled, verify); `SAVED_HIDDEN` + `saved_hidden`. No SKU (decision 15.11). A verify mismatch fails the job; the product stays hidden and disabled. |
 
 Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies `approve_with_text`, `approve_reply_to_preview`, `image_2_unavailable` (drafts for DEV).
+
+### Texts fail closed, cost alerts wired (DEV 15.11.2026)
+- Prompts (`llm.prompt_loader`) and reply templates (`channels.templates`) are used only with `status: approved` or `approved_dev` (`core.text_status`). A draft, a missing status or `not-written` is refused. `AUTOLIST_ALLOW_DRAFTS=1` lets a live eval read a draft; `orchestrator.main` refuses to start while it is set.
+- `job_runner.run_task` sends the cost alerts after every step, whether the step succeeds or fails: at most one `cost_alert`, or `budget_cap_reached` at the cap (`cost_alerts.deliver_cost_alerts`). If the send fails, the events go back to the ledger and are sent after the next step. The step itself is not failed.

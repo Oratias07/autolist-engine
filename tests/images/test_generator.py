@@ -56,7 +56,7 @@ def _ok(prompt_tokens: int | None = 2000, image: bool = True) -> httpx.Response:
 @pytest.fixture
 def prompts(tmp_path: Path) -> Path:
     (tmp_path / "image_main.md").write_text(
-        "---\nname: image_main\nversion: 1\nstatus: draft\nvariables: [product]\n"
+        "---\nname: image_main\nversion: 1\nstatus: approved\nvariables: [product]\n"
         "untrusted: [product]\n---\nMain image of the product.\n{{ product }}\n",
         encoding="utf-8",
     )

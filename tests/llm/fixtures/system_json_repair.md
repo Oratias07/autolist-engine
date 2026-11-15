@@ -1,4 +1,5 @@
 ---
+status: approved
 name: system_json_repair
 version: 1
 variables: [error]

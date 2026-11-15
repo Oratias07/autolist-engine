@@ -1,4 +1,5 @@
 ---
+status: approved
 name: cost_alert
 subject: "[Store] spend update - {{ month_spend }} USD"
 variables: [month_spend, monthly_cap]
