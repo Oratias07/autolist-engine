@@ -45,6 +45,10 @@ def created_problems(payload: Any, draft: ProductDraft, language_id: int) -> lis
     for field, want in checks:
         if str(p.get(field) or "") != want:
             problems.append(f"{field} is {p.get(field)!r}")
+    got_categories = p.get("category")
+    got_ids = {str(k) for k in got_categories} if isinstance(got_categories, Mapping) else set()
+    if {str(i) for i in draft.category_ids} - got_ids:
+        problems.append(f"categories are {sorted(got_ids)}")
     if not _is_truthy_flag(p.get("hidden")):
         problems.append("NOT hidden")
     if not _is_falsy_flag(p.get("status")):

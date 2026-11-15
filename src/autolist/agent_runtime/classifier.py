@@ -37,6 +37,7 @@ class ReplyFacts(_M):
     barcode: Quoted[str]
     keywords: Quoted[list[str]]
     item_code: Quoted[str]
+    category_hint: Quoted[str]
     details: list[Quoted[str]] = Field(description="other stated product facts, one per item")
 
 
@@ -47,7 +48,17 @@ class ClassifiedReply(_M):
     question: str = Field(description="one short question in Hebrew, or an empty string")
 
 
-FIELDS = ("name", "price", "sale_price", "quantity", "model", "barcode", "keywords", "item_code")
+FIELDS = (
+    "name",
+    "price",
+    "sale_price",
+    "quantity",
+    "model",
+    "barcode",
+    "keywords",
+    "item_code",
+    "category_hint",
+)
 
 
 def _text(value: object) -> str:

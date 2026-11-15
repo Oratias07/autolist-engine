@@ -80,6 +80,14 @@ def product_name(job: Job) -> str:
     return fact.value if fact else job.job_id
 
 
+CATEGORY_NONE = "_category_none"
+
+
+def category_text(rt: Runtime, names: list[str]) -> str:
+    """The preview's category line: the names, or the "none chosen" fragment."""
+    return " · ".join(names) if names else rt.fragment(CATEGORY_NONE, {})
+
+
 def numbered(lines: list[str]) -> str:
     return "\n".join(f"{i}. {line}" for i, line in enumerate(lines, 1))
 

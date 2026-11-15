@@ -68,3 +68,12 @@ Taken from the phase file in the store repo, then refined here.
 - **Related products:** the field the owner uses is `product_upsale` (list of product ids, writable).
 - **Google product category:** `feed_category`. A string was not stored; the integer form is tested in P0-06b.
 - **Language:** names and descriptions go under `product_description["3"]` (Hebrew, the only language used in the catalog).
+
+## Categories (phase 1, DEV 15.11.2026, option 1)
+File: `categories.py`.
+- `choose_categories(facts, *, owner_hint, categories, llm, playbook, job_id) -> CategoryChoice`.
+- One call to `choose_category` v1 on the `classify` model. The list offered holds the store's categories that are active, not hidden, and not in `categories.never_auto`.
+- The result is validated in code: unknown or forbidden ids are dropped, duplicates are removed, and at most `categories.max_per_product` are kept. "Not clear" means no category.
+- The product facts sent are name, keywords and details. Price never is.
+- `parse_store_categories` reads `GET /categories` (shape observed in P0-05).
+- Eval: `scripts/spike/category_eval.py`.

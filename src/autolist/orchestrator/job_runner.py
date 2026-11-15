@@ -98,7 +98,7 @@ async def _run(rt: Runtime, payload: dict[str, Any]) -> dict[str, Any]:
             log.warning("stale generate task", extra={"job_id": payload.get("job_id")})
             return {"skipped": True}
         try:
-            job = generate(rt, job)
+            job = await generate(rt, job)
         except Exception as exc:
             current = rt.jobs.get(job.job_id) or job
             if current.state == JobState.GENERATING:

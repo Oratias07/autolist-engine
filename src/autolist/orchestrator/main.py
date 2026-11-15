@@ -32,11 +32,13 @@ PROMPTS_IN_USE = (
     "write_title",
     "write_description",
     "classify_reply",
+    "choose_category",
     "image_main",
     "system_json_output",
     "system_json_repair",
 )
 REPLIES_IN_USE = (
+    "_category_none",
     "approve_old_version",
     "approve_reply_to_preview",
     "approve_with_text",

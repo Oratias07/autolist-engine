@@ -55,6 +55,7 @@ def _build(job: Job, image_2: bytes | None = b"two", choice: Literal[1, 2] | Non
         labels=LABELS,
         to="owner@example.com",
         in_reply_to=None,
+        category="cat",
     )
 
 
@@ -120,6 +121,7 @@ def test_text_with_problems_refused() -> None:
             labels=LABELS,
             to="o@example.com",
             in_reply_to=None,
+            category="cat",
         )
 
 
@@ -141,6 +143,7 @@ def test_variables_use_latest_facts_and_list_missing_optionals() -> None:
         labels=LABELS,
         to="owner@example.com",
         in_reply_to="<m1@example.com>",
+        category="cat",
     )
     v = p.message.variables
     assert v["price"] == "450"

@@ -21,8 +21,9 @@ from autolist.core.state_machine import transition
 from autolist.images.errors import BillingRequired, ImageError
 from autolist.images.postprocess import postprocess
 from autolist.intake.attachment_guard import guard
+from autolist.orchestrator.category_step import choose_for
 from autolist.orchestrator.intake_step import read
-from autolist.orchestrator.runtime import Runtime, alert_developer, send
+from autolist.orchestrator.runtime import Runtime, alert_developer, category_text, send
 from autolist.review.preview import build_preview
 
 log = get_logger(__name__)
@@ -69,7 +70,7 @@ def _image_2(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> bytes | Non
     return postprocess(img.data, px)
 
 
-def generate(rt: Runtime, job: Job) -> Job:
+async def generate(rt: Runtime, job: Job) -> Job:
     text: ListingText = write_listing(
         job.facts,
         llm=rt.llm,
@@ -81,6 +82,7 @@ def generate(rt: Runtime, job: Job) -> Job:
     if text.problems:
         raise RuntimeError(f"text checks failed: {text.problems}")
 
+    choice = await choose_for(rt, job)
     photos = job_photos(rt, job)
     px: int = rt.config.require("images.output_px")
     image_1 = postprocess(photos[0].data, px)
@@ -97,6 +99,7 @@ def generate(rt: Runtime, job: Job) -> Job:
         labels=rt.labels,
         to=rt.owner,
         in_reply_to=None,
+        category=category_text(rt, choice.names),
     )
     message = preview.message.model_copy(
         update={
@@ -119,6 +122,8 @@ def generate(rt: Runtime, job: Job) -> Job:
                     description_html=text.description_html,
                     description_text=text.description_text,
                     open_points=text.open_points,
+                    category_ids=choice.category_ids,
+                    category_names=choice.names,
                     image_choice=preview.image_choice,
                     image_options=preview.image_options,
                     preview_gmail_id=sent.gmail_id,

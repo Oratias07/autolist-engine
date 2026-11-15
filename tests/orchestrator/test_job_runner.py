@@ -65,7 +65,12 @@ async def test_generate_sends_preview_with_generated_image() -> None:
     assert (v.number, v.image_choice, v.image_options) == (1, 2, [2])
     assert v.preview_gmail_id == "s2" and v.preview_rfc_message_id == "<s2@example.com>"
     assert "<p><strong>כיסא משרדי לעבודה</strong></p>" in v.description_html
-    assert rig.llm.prompts == ["extract_request", "write_title", "write_description"]
+    assert rig.llm.prompts == [
+        "extract_request",
+        "write_title",
+        "write_description",
+        "choose_category",
+    ]
     req = rig.images.requests[0]
     assert (req.job_id, req.model, req.prompt_name) == ("T-1", "image-model-a", "image_main")
     assert "450" not in req.variables["product_facts"]  # the price is never in a prompt

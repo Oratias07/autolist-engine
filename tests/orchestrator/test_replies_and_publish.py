@@ -236,3 +236,24 @@ async def test_item_code_is_sent_as_the_sku() -> None:
     await _reply(rig, "מאשר")
     await _publish(rig)
     assert rig.posted is not None and rig.posted["sku"] == "C1"
+
+
+async def test_chosen_category_is_in_the_preview_and_sent_on_create() -> None:
+    rig = await _ready()
+    preview = rig.mail.sent[1]
+    assert preview.variables["category"] == "ריהוט > כיסאות"
+    await _reply(rig, "מאשר")
+    await _publish(rig)
+    assert rig.posted is not None and rig.posted["product_category"] == [11]
+
+
+async def test_no_category_shows_the_none_fragment_and_sends_none() -> None:
+    rig = Rig(extraction([item()]))
+    rig.llm.category = {"primary": None, "secondary": None, "clear": False, "question": "?"}
+    rig.messages["g1"] = email(EMAIL_TEXT)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
+    assert rig.mail.sent[-1].variables["category"] == "<_category_none>"
+    await _reply(rig, "מאשר")
+    await _publish(rig)
+    assert rig.posted is not None and "product_category" not in rig.posted

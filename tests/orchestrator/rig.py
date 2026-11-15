@@ -15,6 +15,7 @@ import httpx
 from PIL import Image
 
 from autolist.agent_runtime.classifier import ClassifiedReply
+from autolist.content.categories import ChosenCategories
 from autolist.content.writer import DescriptionOut, TitleOut
 from autolist.core.blob_store import InMemoryBlobStore
 from autolist.core.config import parse_store_config
@@ -42,6 +43,7 @@ SECTIONS: list[dict[str, Any]] = [
 PLAYBOOK: dict[str, Any] = {
     "listing": {"required": ["name", "price", "quantity", "model_or_item_code", "photo"]},
     "stock": {"subtract": True},
+    "categories": {"never_auto": [9], "max_per_product": 2},
     "title": {"pattern": "x"},
     "description": {"sections": SECTIONS},
 }
@@ -73,6 +75,12 @@ STATES = {
     "EXPIRED": "s-expired",
     "_product_id": "pid",
 }
+CATEGORIES = [
+    {"category_id": 11, "name": "ריהוט  >  כיסאות", "status": 1, "hidden": 0},
+    {"category_id": 12, "name": "ציוד משרדי", "status": 1, "hidden": 0},
+    {"category_id": 9, "name": "מבצעים", "status": 1, "hidden": 0},
+    {"category_id": 13, "name": "כבויה", "status": 0, "hidden": 0},
+]
 COMMANDS = {"approve": "מאשר", "cancel": "בטל", "image_1": "תמונה 1", "image_2": "תמונה 2"}
 
 
@@ -169,6 +177,7 @@ def classified(intent: str, question: str = "", also: bool = False, **facts: Any
     base = {k: q() for k in ("name", "price", "sale_price", "quantity", "model", "barcode")}
     base["keywords"] = q()
     base["item_code"] = q()
+    base["category_hint"] = q()
     base["details"] = []
     base.update(facts)
     return {"intent": intent, "facts": base, "also_wording_or_image": also, "question": question}
@@ -194,6 +203,12 @@ class FakeLLM:
     def __init__(self, extract: dict[str, Any], *, title: TitleOut = TITLE) -> None:
         self.extract, self.title = extract, title
         self.classify: dict[str, Any] = classified("unclear")
+        self.category: dict[str, Any] = {
+            "primary": 11,
+            "secondary": None,
+            "clear": True,
+            "question": "",
+        }
         self.prompts: list[str] = []
         self.requests: list[LLMRequest] = []
         self.error: Exception | None = None
@@ -212,6 +227,7 @@ class FakeLLM:
             "classify_reply": lambda: ClassifiedReply.model_validate_json(
                 json.dumps(self.classify)
             ),
+            "choose_category": lambda: ChosenCategories.model_validate(self.category),
         }[req.prompt]()
         return LLMResult(
             parsed=parsed, text=None, model="m", input_tokens=1, output_tokens=1, usd=Decimal(0)
@@ -336,6 +352,8 @@ class Rig:
 
     def _store(self, r: httpx.Request) -> httpx.Response:
         path = r.url.path
+        if r.method == "GET" and path == "/categories":
+            return httpx.Response(200, json={"response": CATEGORIES})
         if r.method == "GET" and path.count("/") == 3 and path.startswith("/products/"):
             return httpx.Response(200, json={"products": self.catalog})
         if r.method == "POST" and path == "/products":
@@ -346,6 +364,9 @@ class Rig:
                 **self.posted,
                 "image": "https://cdn.istores.co.il/image/upload/clients/1/a.jpg",
                 "product_id": 970,
+                "category": {
+                    str(i): [{"category_id": i}] for i in self.posted.get("product_category", [])
+                },
                 **self.store_overrides,
             }
             return httpx.Response(200, json={"product": product})

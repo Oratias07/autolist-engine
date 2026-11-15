@@ -340,6 +340,7 @@ class ProductDraft(_Strict):
     sku: str | None = Field(min_length=1)  # supplier item code; None = not sent (decision 15.11)
     model: str = Field(min_length=1)
     upc: str | None
+    category_ids: list[int]  # product_category on create (observed in P1-02)
     stock_managed: bool  # iStores `subtract`: the store limits orders to the stock (playbook)
     main_image: ImageRef
     extra_images: list[ImageRef]
@@ -388,11 +389,30 @@ class JobVersion(_Strict):
     description_html: str
     description_text: str  # the same text as plain lines, for a later preview of this version
     open_points: list[str] = Field(default_factory=list)  # shown again in a later preview
+    category_ids: list[int] = Field(default_factory=list)
+    category_names: list[str] = Field(default_factory=list)
     image_choice: Literal[1, 2]
     owner_choice: Literal[1, 2] | None = None  # set once the owner replied "תמונה 1/2"; kept
     image_options: list[Literal[1, 2]] = Field(default_factory=list)  # attached to the preview
     preview_gmail_id: str | None = None  # the sent preview; image 2 is read back from it (#36)
     preview_rfc_message_id: str | None  # Message-ID of the preview email, set once sent
+
+
+class StoreCategory(_Strict):
+    """One category of the store, as `GET /categories` lists it (observed in P0-05)."""
+
+    category_id: int
+    name: str  # the full path, " > " between parent and child
+    status: int
+    hidden: int
+
+
+class CategoryChoice(_Strict):
+    """The categories chosen for one product (choose_category v1), already validated."""
+
+    category_ids: list[int]  # empty: none chosen (unclear); the owner sets it
+    names: list[str]
+    question: str
 
 
 class ListingText(_Strict):
