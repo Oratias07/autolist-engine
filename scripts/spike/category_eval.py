@@ -80,9 +80,8 @@ async def main() -> None:
             problems.append(f"unexpected {sorted(set(res.category_ids) - allowed)}")
         passed += not problems
         chosen = ", ".join(f"{i} {names.get(i, '?')}" for i in res.category_ids) or "-"
-        lines.append(
-            f"- {'PASS' if not problems else 'FAIL'} {case['id']}: {chosen}; question {res.question!r}"
-        )
+        verdict = "PASS" if not problems else "FAIL"
+        lines.append(f"- {verdict} {case['id']}: {chosen}; question {res.question!r}")
         lines += [f"  - {p}" for p in problems]
     lines += [
         "",
