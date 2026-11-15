@@ -9,7 +9,16 @@ import pytest
 from autolist.core.models import JobState
 from autolist.images.errors import ImageRequestRejected
 from autolist.orchestrator.job_runner import run_task
-from tests.orchestrator.rig import EMAIL_TEXT, Rig, _MessagesById, email, extraction, item
+from tests.orchestrator.rig import (
+    EMAIL_TEXT,
+    Rig,
+    _MessagesById,
+    classified,
+    email,
+    extraction,
+    item,
+    q,
+)
 
 S = JobState
 
@@ -182,3 +191,38 @@ async def test_stale_publish_task_is_skipped() -> None:
     rig = await _ready()
     assert await _publish(rig) == {"skipped": True}
     assert rig.posted is None
+
+
+async def test_approve_answering_a_later_agent_email_approves_the_latest() -> None:
+    """P1-08: the owner answered the latest agent email ("לא נשמר"), not the preview."""
+    rig = await _ready()
+    await _reply(rig, "מאשר אבל המחיר 480")  # approve_with_text, sent after the preview
+    later = rig.mail.meta[-1][0].rfc_message_id
+    assert (await _reply(rig, "מאשר", in_reply_to=later))["reply"] == "approved"
+    assert _job(rig).state == S.PUBLISHING
+
+
+async def test_approve_answering_an_email_sent_before_the_preview_does_not_approve() -> None:
+    rig = Rig(extraction([item(price=q())]))
+    rig.messages["g1"] = email(EMAIL_TEXT)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    ask = rig.mail.meta[-1][0].rfc_message_id  # needs_info, before any preview
+    job = _job(rig)
+    rig.llm.classify = classified("facts", price=q("450", "450"))
+    rig.messages["a1"] = email("450", thread=job.thread_id, in_reply_to=ask)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "a1"})
+    rig.clock.advance(seconds=5)
+    await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
+    assert (await _reply(rig, "מאשר", in_reply_to=ask))["reply"] == "not_a_preview_reply"
+    assert _job(rig).state == S.AWAITING_APPROVAL
+
+
+async def test_a_non_agent_message_with_a_known_id_does_not_count() -> None:
+    rig = await _ready()
+    forged = email("x", thread=_job(rig).thread_id)
+    forged.update({"id": "f1", "threadId": _job(rig).thread_id, "internalDate": "9" * 13})
+    forged["rfc"] = "<forged@example.com>"
+    rig.messages["f1"] = forged  # inbound, not SENT
+    assert (await _reply(rig, "מאשר", in_reply_to="<forged@example.com>"))["reply"] == (
+        "not_a_preview_reply"
+    )

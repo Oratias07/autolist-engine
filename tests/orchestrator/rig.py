@@ -231,20 +231,25 @@ class FakeImages:
 
 
 class FakeMailer:
-    def __init__(self) -> None:
+    def __init__(self, clock: Clock | None = None) -> None:
         self.sent: list[OutboundMessage] = []
+        self.meta: list[tuple[SentMessage, int]] = []  # with the send time in ms
         self.fail_on: str | None = None
+        self.clock = clock
 
     def deliver(self, msg: OutboundMessage) -> SentMessage:
         if msg.template == self.fail_on:
             raise RuntimeError("send failed")
         self.sent.append(msg)
         n = len(self.sent)
-        return SentMessage(
+        sent = SentMessage(
             gmail_id=f"s{n}",
             thread_id=msg.thread_id or f"jt{n}",
             rfc_message_id=f"<s{n}@example.com>",
         )
+        ms = int(self.clock.now.timestamp() * 1000) + n if self.clock else n
+        self.meta.append((sent, ms))
+        return sent
 
     def templates(self) -> list[str]:
         return [m.template for m in self.sent]
@@ -284,7 +289,7 @@ class Rig:
         self.clock = Clock()
         self.llm = FakeLLM(self.extract)
         self.images = FakeImages()
-        self.mail = FakeMailer()
+        self.mail = FakeMailer(self.clock)
         self.queue = FakeQueue()
         self.jobs = InMemoryJobStore()
         self.blobs = InMemoryBlobStore()
@@ -314,8 +319,8 @@ class Rig:
 
     def _gmail(self) -> FakeGmail:
         sent = {
-            f"s{i}": _as_sent(m, self.config.channels.email.agent_mailbox)
-            for i, m in enumerate(self.mail.sent, 1)
+            meta.gmail_id: _as_sent(m, meta, ms, self.config.channels.email.agent_mailbox)
+            for m, (meta, ms) in zip(self.mail.sent, self.mail.meta, strict=True)
         }
         return _MessagesById({**self.messages, **sent})
 
@@ -341,7 +346,7 @@ class Rig:
         return client
 
 
-def _as_sent(msg: OutboundMessage, mailbox: str) -> dict[str, Any]:
+def _as_sent(msg: OutboundMessage, meta: SentMessage, ms: int, mailbox: str) -> dict[str, Any]:
     parts = [
         {
             "mimeType": a.mime_type,
@@ -351,6 +356,10 @@ def _as_sent(msg: OutboundMessage, mailbox: str) -> dict[str, Any]:
         for a in msg.attachments
     ]
     return {
+        "id": meta.gmail_id,
+        "threadId": meta.thread_id,
+        "internalDate": str(ms),
+        "rfc": meta.rfc_message_id,
         "labelIds": ["SENT"],
         "payload": {"headers": [{"name": "From", "value": mailbox}], "parts": parts},
     }
@@ -367,3 +376,10 @@ class _MessagesById(FakeGmail):
         from tests.channels.conftest import Call
 
         return Call(self._messages[kw["id"]], self.calls, "get")
+
+    def list(self, **kw: Any) -> Any:
+        from tests.channels.conftest import Call
+
+        rfc = "<" + str(kw["q"]).split("rfc822msgid:")[1].split(" ")[0] + ">"
+        found = [{"id": k} for k, m in self._messages.items() if m.get("rfc") == rfc]
+        return Call({"messages": found}, self.calls, "list")

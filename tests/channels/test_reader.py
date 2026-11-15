@@ -113,7 +113,9 @@ def test_unverified_sender_is_refused(
 
 
 def test_strip_quoted_variants() -> None:
-    assert strip_quoted("שלום\nOn Sun, Nov 15 2026 Owner <owner@example.com> wrote:\n> old") == "שלום"
+    assert (
+        strip_quoted("שלום\nOn Sun, Nov 15 2026 Owner <owner@example.com> wrote:\n> old") == "שלום"
+    )
     assert strip_quoted("‏תשובה\n‫בתאריך יום א׳, 15 בנוב׳ מאת X <x@y>:‬\n> a") == "‏תשובה"
     assert strip_quoted("טקסט\n> ציטוט\n>\n") == "טקסט"
     assert strip_quoted("כתבתי: מחיר 5") == "כתבתי: מחיר 5"

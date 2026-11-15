@@ -78,8 +78,9 @@ def build_preview(
     if image_2 is not None:
         data[2] = image_2
 
+    # the writer's open points are not shown: the owner cannot answer them in a way the fast
+    # track can use, which made a loop in P1-08 (DEV 15.11.2026). They stay on the version.
     missing = [labels[k] for k in SHOWN_OPTIONAL if job.fact(k) is None]
-    missing += text.open_points
     message = OutboundMessage(
         channel="email",
         to=to,

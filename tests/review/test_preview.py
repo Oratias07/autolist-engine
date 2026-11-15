@@ -145,7 +145,7 @@ def test_variables_use_latest_facts_and_list_missing_optionals() -> None:
     v = p.message.variables
     assert v["price"] == "450"
     assert v["version"] == "2"
-    assert v["optional_missing"] == "מילות חיפוש, צבע"
+    assert v["optional_missing"] == "מילות חיפוש"  # open points are not shown (P1-08)
     assert p.message.template == "ready_for_approval"
     assert (p.message.thread_id, p.message.in_reply_to) == ("t1", "<m1@example.com>")
 

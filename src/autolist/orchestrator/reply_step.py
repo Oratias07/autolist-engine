@@ -2,7 +2,8 @@
 
 Exact commands first, without a model: "מאשר", "בטל", "תמונה 1", "תמונה 2" (the words are in
 the store repo). Approval binds to the latest preview: the reply's In-Reply-To must be that
-email's Message-ID. "מאשר" with other text never approves. Any other reply goes to
+email's Message-ID or any agent email sent after it in the thread (DEV 15.11.2026). "מאשר"
+with other text never approves. Any other reply goes to
 ``classify_reply`` (no approve or cancel intent exists there): facts, a wording or image
 request (the developer), a status question, something else (out of scope), or unclear (one
 question, nothing changes).
@@ -14,6 +15,7 @@ from typing import Literal
 
 from autolist.agent_runtime.classifier import classify_reply
 from autolist.agent_runtime.commands import mentions, parse_command
+from autolist.channels.email.own_sent import sent_by_gmail_id, sent_by_rfc_id
 from autolist.core.models import ChannelMessage, Job, JobState, ReplyIntent
 from autolist.core.state_machine import FINAL, transition
 from autolist.orchestrator.new_version import limit_reached, new_version
@@ -70,21 +72,36 @@ def _status(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
 
 
 def _approve(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
+    """Approve the latest version when the reply answers an agent email of this thread that was
+    sent at or after the latest preview (DEV 15.11.2026). Earlier → which version it saw."""
     latest = job.versions[-1]
-    if msg.in_reply_to is None or msg.in_reply_to != latest.preview_rfc_message_id:
-        old = next((v for v in job.versions if v.preview_rfc_message_id == msg.in_reply_to), None)
-        if old is not None and msg.in_reply_to is not None:
-            _job_mail(
-                rt,
-                job,
-                msg,
-                "approve_old_version",
-                old_version=str(old.number),
-                version=str(latest.number),
-            )
-            return {"job_id": job.job_id, "reply": "old_version"}
+    email = rt.config.channels.email
+    service = rt.gmail()
+    answered = sent_by_rfc_id(service, msg.in_reply_to, config=email) if msg.in_reply_to else None
+    if answered is None or answered.thread_id != msg.thread_id or latest.preview_gmail_id is None:
         _job_mail(rt, job, msg, "approve_reply_to_preview", version=str(latest.number))
         return {"job_id": job.job_id, "reply": "not_a_preview_reply"}
+    seen = None
+    for version in reversed(job.versions):
+        if version.preview_gmail_id is None:
+            continue
+        preview = sent_by_gmail_id(service, version.preview_gmail_id, config=email)
+        if preview is not None and preview.sent_ms <= answered.sent_ms:
+            seen = version
+            break
+    if seen is None:
+        _job_mail(rt, job, msg, "approve_reply_to_preview", version=str(latest.number))
+        return {"job_id": job.job_id, "reply": "not_a_preview_reply"}
+    if seen.number != latest.number:
+        _job_mail(
+            rt,
+            job,
+            msg,
+            "approve_old_version",
+            old_version=str(seen.number),
+            version=str(latest.number),
+        )
+        return {"job_id": job.job_id, "reply": "old_version"}
     job = transition(job, JobState.PUBLISHING, rt.now())
     rt.jobs.save(job)
     rt.queue.enqueue(JOB_TASK_PATH, {"event": "publish", "job_id": job.job_id})
