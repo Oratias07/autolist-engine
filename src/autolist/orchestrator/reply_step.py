@@ -19,7 +19,7 @@ from autolist.channels.email.own_sent import sent_by_gmail_id, sent_by_rfc_id
 from autolist.core.models import ChannelMessage, Job, JobState, ReplyIntent
 from autolist.core.state_machine import FINAL, transition
 from autolist.orchestrator.new_version import limit_reached, new_version
-from autolist.orchestrator.reply_facts import apply_facts
+from autolist.orchestrator.reply_facts import apply_facts, missing_required
 from autolist.orchestrator.runtime import (
     JOB_TASK_PATH,
     Runtime,
@@ -178,5 +178,11 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
         return await apply_facts(rt, job, msg, c)
     if c.intent == ReplyIntent.FACTS:
         return _status(rt, job, msg)  # working on it now (RECEIVED, GENERATING, PUBLISHING)
+    if job.state == JobState.NEEDS_INFO and not missing_required(rt, job):
+        # every required detail is there: the open question was the model's own (for
+        # example the photo check), and this reply answers it. Go on; the preview shows the
+        # photo, and the owner can still cancel (P1-08: no loop on a plain "כן").
+        answered = c.model_copy(update={"facts": [], "unverified_fields": [], "question": ""})
+        return await apply_facts(rt, job, msg, answered)
     _job_mail(rt, job, msg, "reply_unclear", question=c.question)
     return {"job_id": job.job_id, "reply": "unclear"}
