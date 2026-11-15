@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from autolist.core.facts import owner_details
 from autolist.core.models import ChannelMessage, JobFact, ReplyClassification, ReplyIntent
 from autolist.llm.client import LLMClient, LLMRequest
 
@@ -35,6 +36,8 @@ class ReplyFacts(_M):
     model: Quoted[str]
     barcode: Quoted[str]
     keywords: Quoted[list[str]]
+    item_code: Quoted[str]
+    details: list[Quoted[str]] = Field(description="other stated product facts, one per item")
 
 
 class ClassifiedReply(_M):
@@ -44,7 +47,7 @@ class ClassifiedReply(_M):
     question: str = Field(description="one short question in Hebrew, or an empty string")
 
 
-FIELDS = ("name", "price", "sale_price", "quantity", "model", "barcode", "keywords")
+FIELDS = ("name", "price", "sale_price", "quantity", "model", "barcode", "keywords", "item_code")
 
 
 def _text(value: object) -> str:
@@ -89,6 +92,7 @@ def classify_reply(
                 gmail_id=message.message_id,
             )
         )
+    facts += owner_details(parsed.facts.details, message, "reply")
     intent = ReplyIntent(parsed.intent)
     if intent == ReplyIntent.FACTS and not facts and not unverified:
         intent = ReplyIntent.UNCLEAR  # "facts" with nothing stated: never act on it

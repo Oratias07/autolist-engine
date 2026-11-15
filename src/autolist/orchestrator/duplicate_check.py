@@ -2,7 +2,8 @@
 
 It runs right after extraction, and again after a NEEDS_INFO answer, so no paid text or image
 call is made for a product the store already has. ``publish.create_hidden`` checks once more
-before it creates. The SKU is not known in the fast track (decision 15.11.2026): model only.
+before it creates. The SKU is the owner's item code when he wrote one (B-03), else the model
+alone is checked (decision 15.11.2026).
 """
 
 from __future__ import annotations
@@ -20,7 +21,9 @@ async def cancel_if_duplicate(rt: Runtime, job: Job) -> Job | None:
         raise RuntimeError(f"{job.job_id}: duplicate check needs the model")
     page_size: int = rt.config.require("istores.catalog_page_size")
     async with rt.istores() as client:
-        dup = await find_duplicate(client, page_size, None, model.value)
+        item_code = job.fact("item_code")
+        sku = item_code.value if item_code else None  # B-03: the item code is the SKU
+        dup = await find_duplicate(client, page_size, sku, model.value)
     if dup is None:
         return None
     field, value, product_id = dup

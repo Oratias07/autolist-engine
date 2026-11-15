@@ -149,3 +149,20 @@ def test_write_listing_runs_both_prompts_on_write_model() -> None:
     assert out.title == "כיסא משרדי CH-200"
     assert out.open_points == ["צבע", "חומר"]
     assert out.problems == []
+
+
+def test_details_reach_the_writer_and_the_item_code_does_not() -> None:
+    facts = [
+        *FACTS,
+        _f("item_code", "1571"),
+        _f("detail", 'אורך 40 מ"מ'),
+        _f("detail", "לכל סוגי המשטחים"),
+        _f("detail", 'אורך 40 מ"מ'),
+    ]
+    texts = [f["text"] for f in writer_facts(facts)]
+    assert texts == [
+        "name: כיסא משרדי",
+        "model: CH-200",
+        'detail: אורך 40 מ"מ',
+        "detail: לכל סוגי המשטחים",
+    ]

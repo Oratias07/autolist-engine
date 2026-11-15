@@ -226,3 +226,13 @@ async def test_a_non_agent_message_with_a_known_id_does_not_count() -> None:
     assert (await _reply(rig, "מאשר", in_reply_to="<forged@example.com>"))["reply"] == (
         "not_a_preview_reply"
     )
+
+
+async def test_item_code_is_sent_as_the_sku() -> None:
+    rig = Rig(extraction([item(item_code=q("C1", "C1"))]))
+    rig.messages["g1"] = email(EMAIL_TEXT)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
+    await _reply(rig, "מאשר")
+    await _publish(rig)
+    assert rig.posted is not None and rig.posted["sku"] == "C1"

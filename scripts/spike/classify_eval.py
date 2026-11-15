@@ -1,4 +1,4 @@
-"""P1-07 live eval of classify_reply v1 through agent_runtime.classify_reply (thin CLI).
+"""Live eval of classify_reply (P1-07 cases, plus P1-08 cases when present); thin CLI.
 
 Runs the cases in the store repo's fixtures/samples/p1-07-classify.yaml with the configured
 classify model. Paid (Anthropic), through the cost ledger; no store writes. A case passes when
@@ -34,7 +34,14 @@ def _check(res: ReplyClassification, expect: dict[str, Any]) -> list[str]:
     problems: list[str] = []
     if res.intent != expect["intent"]:
         problems.append(f"intent {res.intent} != {expect['intent']}")
-    got = {f.key: f.value for f in res.facts}
+    got = {f.key: f.value for f in res.facts if f.key != "detail"}
+    details = [f.value for f in res.facts if f.key == "detail"]
+    for must in expect.get("details") or []:
+        if not any(must in d for d in details):
+            problems.append(f"no detail with {must!r} (got {details})")
+    for banned in expect.get("not_in_details") or []:
+        if any(banned in d for d in details):
+            problems.append(f"copied question text in details: {banned!r}")
     want = {k: str(v) for k, v in (expect.get("facts") or {}).items()}
     for key, value in want.items():
         if _norm(got.get(key)) != _norm(value):
@@ -53,16 +60,18 @@ def main() -> None:
     args = ap.parse_args()
     configure_logging()
     cfg = load_store_config()
-    data = yaml.safe_load(
-        (store_dir() / "fixtures" / "samples" / "p1-07-classify.yaml").read_text(encoding="utf-8")
-    )
+    samples = store_dir() / "fixtures" / "samples"
+    data = yaml.safe_load((samples / "p1-07-classify.yaml").read_text(encoding="utf-8"))
+    extra = samples / "p1-08-classify-v2.yaml"
+    if extra.exists():
+        data["cases"] += yaml.safe_load(extra.read_text(encoding="utf-8"))["cases"]
     ledger_path = args.out / "fixtures" / "ledger" / "p0-anthropic.json"
     ledger = CostLedger(cfg.costs, cfg.store.timezone, JsonFileLedgerStore(ledger_path))
     llm = AnthropicClient(cfg, get_secret(cfg, "anthropic_api_key"), ledger)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     before = ledger.month_spend()
     lines = [
-        f"# P1-07 classify_reply v1 eval - {stamp}",
+        f"# classify_reply eval - {stamp}",
         "",
         f"model: {cfg.llm.models.classify}",
         "",

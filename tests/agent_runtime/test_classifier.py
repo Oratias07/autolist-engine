@@ -17,6 +17,8 @@ def _q(value: Any = None, quote: str | None = None) -> dict[str, Any]:
 def _out(intent: str = "facts", **facts: Any) -> dict[str, Any]:
     base = {k: _q() for k in ("name", "price", "sale_price", "quantity", "model", "barcode")}
     base["keywords"] = _q()
+    base["item_code"] = _q()
+    base["details"] = []
     base.update(facts)
     return {"intent": intent, "facts": base, "also_wording_or_image": False, "question": ""}
 
@@ -79,3 +81,21 @@ def test_other_intents_pass_through() -> None:
     for intent in ("status", "wording_or_image", "other", "unclear"):
         res, _ = _run("x", _out(intent))
         assert res.intent == intent
+
+
+def test_details_from_an_answer_to_copied_questions() -> None:
+    text = 'מהן מידות המברשת? - אורך 40 מ"מ\nלאילו משטחים? - מיועדת לכל סוגי המשטחים'  # noqa: RUF001
+    res, _ = _run(
+        text,
+        _out(
+            details=[
+                _q('אורך 40 מ"מ', 'אורך 40 מ"מ'),
+                _q("מיועדת לכל סוגי המשטחים", "מיועדת לכל סוגי המשטחים"),
+            ]
+        ),
+    )
+    assert res.intent == ReplyIntent.FACTS
+    assert [(f.key, f.value, f.source) for f in res.facts] == [
+        ("detail", 'אורך 40 מ"מ', "reply"),
+        ("detail", "מיועדת לכל סוגי המשטחים", "reply"),
+    ]

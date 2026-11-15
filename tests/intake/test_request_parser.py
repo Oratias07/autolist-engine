@@ -59,6 +59,8 @@ def _item(**over: Any) -> dict[str, Any]:
         "model": _q("T8103", "T8103"),
         "keywords": _q(),
         "category_hint": _q(),
+        "item_code": _q(),
+        "details": [],
         "photo_indexes": [1],
         "printed_text": False,
     }
@@ -155,3 +157,25 @@ def test_rejected_attachment_is_reported_and_not_sent() -> None:
     assert res.rejected_attachments == ["x.pdf: not a readable image"]
     assert len(llm.requests[0].images) == 1
     assert llm.requests[0].variables["attachments_list"] == "1. p1.png"
+
+
+def test_item_code_and_details_with_exact_quotes() -> None:
+    text = TEXT + '\nמקט: 1571\nאורך 40 מ"מ, מיועדת לכל סוגי המשטחים'  # noqa: RUF001
+    out = _out(
+        [
+            _item(
+                item_code=_q("1571", "מקט: 1571"),
+                details=[
+                    _q('אורך 40 מ"מ', 'אורך 40 מ"מ'),
+                    _q("מיועדת לכל סוגי המשטחים", "מיועדת לכל סוגי המשטחים"),
+                    _q("עמיד במים", "עמיד במים"),  # not in the text: dropped, not asked
+                    _q('אורך 40 מ"מ', 'אורך 40 מ"מ'),  # duplicate: once
+                ],
+            )
+        ]
+    )
+    res, _ = _run(out, _msg(text))
+    facts = [(f.key, f.value) for f in res.items[0].facts]
+    assert ("item_code", "1571") in facts
+    assert [v for k, v in facts if k == "detail"] == ['אורך 40 מ"מ', "מיועדת לכל סוגי המשטחים"]
+    assert res.items[0].unverified_fields == []
