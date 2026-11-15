@@ -57,6 +57,12 @@ def test_open_jobs_excludes_final(store: Any) -> None:
     assert [j.job_id for j in store.open_jobs()] == [b.job_id]
 
 
+def test_by_source_thread(store: Any) -> None:
+    a, b = _job(store), _job(store, 1)
+    assert [j.job_id for j in store.by_source_thread("t0")] == [a.job_id, b.job_id]
+    assert store.by_source_thread("t9") == []
+
+
 def test_happy_path_transitions() -> None:
     job = _job(InMemoryJobStore())
     for target in (S.GENERATING, S.AWAITING_APPROVAL, S.PUBLISHING, S.SAVED_HIDDEN):

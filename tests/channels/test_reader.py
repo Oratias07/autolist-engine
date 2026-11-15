@@ -124,3 +124,19 @@ def test_strip_quoted_variants() -> None:
 
 def test_html_to_text_keeps_line_breaks() -> None:
     assert html_to_text("<p>a</p><p>b<br>c</p>").split() == ["a", "b", "c"]
+
+
+def test_message_id_and_in_reply_to(email_cfg: EmailChannelConfig) -> None:
+    msg = _message([_text("מאשר")], email_cfg.allowed_senders[0])
+    msg["payload"]["headers"] += [
+        {"name": "Message-ID", "value": " <r1@example.com> "},
+        {"name": "In-Reply-To", "value": "<p1@example.com>"},
+    ]
+    out = fetch_message(FakeGmail({"get": [msg]}), "m1", config=email_cfg, max_bytes=100)
+    assert (out.rfc_message_id, out.in_reply_to) == ("<r1@example.com>", "<p1@example.com>")
+
+
+def test_no_reply_headers(email_cfg: EmailChannelConfig) -> None:
+    msg = _message([_text("x")], email_cfg.allowed_senders[0])
+    out = fetch_message(FakeGmail({"get": [msg]}), "m1", config=email_cfg, max_bytes=100)
+    assert (out.rfc_message_id, out.in_reply_to) == (None, None)

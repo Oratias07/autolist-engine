@@ -1,0 +1,308 @@
+"""A full fake runtime for job-runner tests: fake Gmail, LLM, images, store, mail, queue."""
+
+from __future__ import annotations
+
+import base64
+import copy
+import io
+import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Any
+
+import httpx
+from PIL import Image
+
+from autolist.content.writer import DescriptionOut, TitleOut
+from autolist.core.blob_store import InMemoryBlobStore
+from autolist.core.config import parse_store_config
+from autolist.core.cost_ledger import CostLedger, InMemoryLedgerStore
+from autolist.core.job_store import InMemoryJobStore
+from autolist.core.models import GeneratedImage, ImageRequest, OutboundMessage, SentMessage
+from autolist.intake.request_parser import ExtractedRequest
+from autolist.llm.client import LLMRequest, LLMResult
+from autolist.orchestrator.runtime import Runtime
+from tests.channels.conftest import FakeGmail
+from tests.core.conftest import VALID_STORE
+from tests.publish.conftest import make_client
+
+T0 = datetime(2026, 11, 15, 10, tzinfo=UTC)
+AR = (
+    "mx.google.com; dkim=pass header.i=@example.com header.s=s1 header.b=abc; "
+    "dmarc=pass (p=NONE) header.from=example.com"
+)
+SECTIONS: list[dict[str, Any]] = [
+    {"id": "headline", "render": "<p><strong>{headline}</strong></p>"},
+    {"id": "intro", "sentences": 2},
+    {"id": "specs", "heading": "מפרט:"},
+    {"id": "benefits", "heading": "יתרונות:"},
+]
+PLAYBOOK: dict[str, Any] = {
+    "listing": {"required": ["name", "price", "quantity", "model", "photo"]},
+    "title": {"pattern": "x"},
+    "description": {"sections": SECTIONS},
+}
+LABELS = {
+    "name": "שם המוצר",
+    "price": "מחיר",
+    "sale_price": "מחיר מבצע",
+    "quantity": "כמות במלאי",
+    "model": "דגם",
+    "barcode": "ברקוד",
+    "keywords": "מילות חיפוש",
+    "category_hint": "קטגוריה",
+    "photo": "תמונה",
+    "sku": "sku-label",
+    "_none": "אין",
+}
+
+
+def png(color: str = "red", size: tuple[int, int] = (40, 30)) -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", size, color).save(out, format="PNG")
+    return out.getvalue()
+
+
+def jpeg() -> bytes:
+    out = io.BytesIO()
+    Image.new("RGB", (64, 64), "blue").save(out, format="JPEG")
+    return out.getvalue()
+
+
+def _b(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def email(
+    text: str,
+    *,
+    thread: str = "t0",
+    photos: int = 1,
+    subject: str = "מוצר חדש",
+    sender: str = "owner@example.com",
+    in_reply_to: str | None = None,
+) -> dict[str, Any]:
+    headers = [
+        {"name": "Authentication-Results", "value": AR},
+        {"name": "From", "value": f"Owner <{sender}>"},
+        {"name": "Subject", "value": subject},
+        {"name": "Message-ID", "value": f"<{thread}-{len(text)}@example.com>"},
+    ]
+    if in_reply_to:
+        headers.append({"name": "In-Reply-To", "value": in_reply_to})
+    parts: list[dict[str, Any]] = [
+        {"mimeType": "text/plain", "filename": "", "body": {"data": _b(text.encode())}}
+    ]
+    for i in range(photos):
+        data = png()
+        parts.append(
+            {
+                "mimeType": "image/png",
+                "filename": f"p{i + 1}.png",
+                "body": {"size": len(data), "data": _b(data)},
+            }
+        )
+    return {
+        "threadId": thread,
+        "internalDate": "1794730000000",
+        "payload": {"mimeType": "multipart/mixed", "headers": headers, "parts": parts},
+    }
+
+
+def q(value: Any = None, quote: str | None = None) -> dict[str, Any]:
+    return {"value": value, "quote": quote}
+
+
+def item(**over: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "name": q("כיסא משרדי", "כיסא משרדי"),
+        "price": q("450", "450"),
+        "sale_price": q(),
+        "quantity": q(3, "3 יחידות"),
+        "barcode": q(),
+        "model": q("C1", "C1"),
+        "keywords": q(),
+        "category_hint": q(),
+        "photo_indexes": [1],
+        "printed_text": False,
+    }
+    base.update(over)
+    return base
+
+
+EMAIL_TEXT = "כיסא משרדי, דגם C1, 450, 3 יחידות"
+
+
+def extraction(items: list[dict[str, Any]], **over: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "items": items,
+        "products_clearly_separated": True,
+        "unassigned_photos": [],
+        "questions": [],
+    }
+    base.update(over)
+    return base
+
+
+TITLE = TitleOut(title="כיסא משרדי C1", fact_ids=["F1", "F2"], open_points=[])
+DESC = DescriptionOut.model_validate(
+    {
+        "headline": "כיסא משרדי לעבודה",
+        "intro": ["א.", "ב."],
+        "specs": [{"label": "דגם", "value": "C1", "fact_ids": ["F2"]}],
+        "benefits": [
+            {"title": "נוחות", "sentence": "נוח", "fact_ids": ["F1"]},
+            {"title": "סדר", "sentence": "מסודר", "fact_ids": ["F1"]},
+            {"title": "פשטות", "sentence": "פשוט", "fact_ids": ["F1"]},
+        ],
+        "open_points": [],
+    }
+)
+
+
+class FakeLLM:
+    def __init__(self, extract: dict[str, Any], *, title: TitleOut = TITLE) -> None:
+        self.extract, self.title = extract, title
+        self.prompts: list[str] = []
+        self.error: Exception | None = None
+
+    def complete(self, req: LLMRequest) -> LLMResult:
+        self.prompts.append(req.prompt)
+        if self.error and req.prompt != "extract_request":
+            raise self.error
+        parsed: Any = {
+            "extract_request": lambda: ExtractedRequest.model_validate_json(
+                json.dumps(self.extract)
+            ),
+            "write_title": lambda: self.title,
+            "write_description": lambda: DESC,
+        }[req.prompt]()
+        return LLMResult(
+            parsed=parsed, text=None, model="m", input_tokens=1, output_tokens=1, usd=Decimal(0)
+        )
+
+
+class FakeImages:
+    def __init__(self) -> None:
+        self.requests: list[ImageRequest] = []
+        self.error: Exception | None = None
+
+    def generate(self, req: ImageRequest) -> GeneratedImage:
+        self.requests.append(req)
+        if self.error:
+            raise self.error
+        return GeneratedImage(
+            model=req.model,
+            role=req.role,
+            mime_type="image/jpeg",
+            data=jpeg(),
+            size_px=(64, 64),
+            text_parts=[],
+            finish_reason="STOP",
+            usd=Decimal("0.05"),
+            estimated_cost=False,
+        )
+
+
+class FakeMailer:
+    def __init__(self) -> None:
+        self.sent: list[OutboundMessage] = []
+        self.fail_on: str | None = None
+
+    def deliver(self, msg: OutboundMessage) -> SentMessage:
+        if msg.template == self.fail_on:
+            raise RuntimeError("send failed")
+        self.sent.append(msg)
+        n = len(self.sent)
+        return SentMessage(
+            gmail_id=f"s{n}",
+            thread_id=msg.thread_id or f"jt{n}",
+            rfc_message_id=f"<s{n}@example.com>",
+        )
+
+    def templates(self) -> list[str]:
+        return [m.template for m in self.sent]
+
+
+class FakeQueue:
+    def __init__(self) -> None:
+        self.tasks: list[tuple[str, dict[str, Any]]] = []
+
+    def enqueue(self, path: str, payload: dict[str, Any]) -> str:
+        self.tasks.append((path, payload))
+        return f"task-{len(self.tasks)}"
+
+
+@dataclass
+class Clock:
+    now: datetime = T0
+
+    def advance(self, **kw: float) -> None:
+        self.now += timedelta(**kw)
+
+
+@dataclass
+class Rig:
+    extract: dict[str, Any]
+    catalog: list[dict[str, Any]] = field(default_factory=list)
+    messages: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        data = copy.deepcopy(VALID_STORE)
+        data["istores"]["catalog_page_size"] = 100
+        data["istores"]["required_name_languages"] = [3]
+        data["images"]["model"] = "image-model-a"
+        self.config = parse_store_config(data)
+        self.clock = Clock()
+        self.llm = FakeLLM(self.extract)
+        self.images = FakeImages()
+        self.mail = FakeMailer()
+        self.queue = FakeQueue()
+        self.jobs = InMemoryJobStore()
+        self.ledger = CostLedger(
+            self.config.costs, self.config.store.timezone, InMemoryLedgerStore()
+        )
+        self.rt = Runtime(
+            config=self.config,
+            playbook=PLAYBOOK,
+            glossary={"terms": []},
+            voice="ענייני",
+            labels=LABELS,
+            jobs=self.jobs,
+            gmail=self._gmail,
+            mail=self.mail,
+            llm=self.llm,
+            images=self.images,
+            istores=self._istores,
+            blobs=InMemoryBlobStore(),
+            ledger=self.ledger,
+            queue=self.queue,
+            fragment=lambda name, _v: f"<{name}>",
+            now=lambda: self.clock.now,
+        )
+
+    def _gmail(self) -> FakeGmail:
+        return _MessagesById(self.messages)
+
+    def _store(self, r: httpx.Request) -> httpx.Response:
+        if r.method == "GET" and r.url.path.startswith("/products/"):
+            return httpx.Response(200, json={"products": self.catalog})
+        return httpx.Response(500)
+
+    def _istores(self) -> Any:
+        client, _, _, _ = make_client(self._store, self.config)
+        return client
+
+
+class _MessagesById(FakeGmail):
+    """``messages().get(id=...)`` returns the stored message with that id."""
+
+    def __init__(self, messages: dict[str, dict[str, Any]]) -> None:
+        super().__init__({})
+        self._messages = messages
+
+    def get(self, **kw: Any) -> Any:
+        from tests.channels.conftest import Call
+
+        return Call(self._messages[kw["id"]], self.calls, "get")

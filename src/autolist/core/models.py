@@ -38,6 +38,7 @@ class IStoresConfig(_Strict):
     languages: Any | None
     required_name_languages: list[Any] | None
     stock_statuses: Any | None
+    catalog_page_size: int | None = Field(gt=0)  # products per catalog page
 
 
 class GcpConfig(_Strict):
@@ -248,6 +249,7 @@ class CostEntry(_Strict):
 class CostDecision(_Strict):
     allowed: bool
     reason: str
+    cap: Literal["monthly", "per_job"] | None = None  # which cap refused it
 
 
 class CostThresholdCrossed(_Strict):
@@ -403,9 +405,13 @@ class Job(_Strict):
     state: JobState
     source_gmail_id: str  # the owner's email that opened the job
     source_thread_id: str
+    source_subject: str | None = None  # the owner email's subject; replies there are "Re: ..."
+    source_rfc_message_id: str | None = None  # its Message-ID, for In-Reply-To
     product_index: int = Field(ge=0)  # position of this product in that email
     thread_id: str | None  # the job's own thread, set when the agent opens it
     facts: list[JobFact] = Field(default_factory=list)
+    photo_indexes: list[int] = Field(default_factory=list)  # 1-based, in the source email's
+    # guarded image list (re-derived from the email when needed; images are not stored)
     printed_text: bool | None = None
     versions: list[JobVersion] = Field(default_factory=list)
     revision_count: int = Field(default=0, ge=0)
@@ -467,6 +473,8 @@ class ChannelMessage(_Strict):
     subject: str | None
     text: str
     attachments: list[Attachment] = Field(default_factory=list)
+    rfc_message_id: str | None = None  # this message's Message-ID header
+    in_reply_to: str | None = None  # the In-Reply-To header: which agent email it answers
 
 
 class OutboundMessage(_Strict):
