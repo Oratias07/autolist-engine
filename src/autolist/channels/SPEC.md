@@ -111,3 +111,9 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
   - capped at 20,000 characters.
 - **Attachments:** every part with a file name, attached or inline. A part larger than `max_bytes` is listed without data and is never downloaded.
 - **Read-only:** no labels, no replies.
+
+## Amendment (2026-11-15, fast-track design PR #39): sending previews and alerts
+- **Recipients:** the owner, plus `extra_recipients` given by the caller. The orchestrator passes only `agent.developer_contact`, for alerts. The `To` header is the checked recipient.
+- **Attachments:** only JPEG images made by the system (the preview images). At most 4 per email and 5 MB each. Files received from outside are never sent on.
+- **`GmailSender.deliver(msg) -> SentMessage`:** sends, then reads back the thread id and the `Message-ID` header. Approval binds to that Message-ID through the owner's `In-Reply-To`.
+- **`templates.render_fragment(name, variables)`:** a template body without subject or signature, inserted into another reply (the image notes).
