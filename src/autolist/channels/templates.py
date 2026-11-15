@@ -72,6 +72,11 @@ def load_reply(name: str, folder: Path | None = None) -> ReplyTemplate:
     return ReplyTemplate(name, subject, variables, body)
 
 
+def load_signature(folder: Path | None = None) -> str:
+    """The signature appended to every reply (no subject of its own)."""
+    return _read("_signature", folder)[1]
+
+
 def render_fragment(name: str, variables: dict[str, str], folder: Path | None = None) -> str:
     """A template body without subject or signature, for insertion into another reply."""
     return _render(name, variables, folder)[1]
@@ -79,7 +84,7 @@ def render_fragment(name: str, variables: dict[str, str], folder: Path | None = 
 
 def render_reply(name: str, variables: dict[str, str], folder: Path | None = None) -> RenderedReply:
     subject, body = _render(name, variables, folder)
-    _, signature = _read("_signature", folder)
+    signature = load_signature(folder)
     return RenderedReply(subject=subject, body=f"{body}\n\n{signature}\n")
 
 

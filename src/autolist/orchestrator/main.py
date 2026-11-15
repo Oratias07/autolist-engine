@@ -25,6 +25,72 @@ from autolist.orchestrator.tasks_queue import CloudTasksQueue, QueueTarget
 
 log = get_logger(__name__)
 SERVICE_URL_ENV = "AUTOLIST_SERVICE_URL"
+# every store-repo text the service uses: /health loads each one, so a refused text (draft,
+# missing) fails the deploy check instead of the first owner email that needs it
+PROMPTS_IN_USE = (
+    "extract_request",
+    "write_title",
+    "write_description",
+    "classify_reply",
+    "image_main",
+    "system_json_output",
+    "system_json_repair",
+)
+REPLIES_IN_USE = (
+    "approve_old_version",
+    "approve_reply_to_preview",
+    "approve_with_text",
+    "budget_cap_reached",
+    "cancelled",
+    "change_not_supported",
+    "clarify_products",
+    "cost_alert",
+    "developer_alert",
+    "duplicate_found",
+    "expired",
+    "failed",
+    "failed_budget",
+    "image_2_unavailable",
+    "image_note_fallback",
+    "image_note_generated",
+    "image_note_owner_choice",
+    "image_note_printed_text",
+    "needs_info",
+    "no_product_found",
+    "out_of_scope",
+    "ready_for_approval",
+    "received",
+    "reply_in_product_thread",
+    "reply_unclear",
+    "saved_hidden",
+    "status_reply",
+    "too_many_products",
+)
+
+
+def text_problems() -> list[str]:
+    """Load every text in use; a refused or broken one is a health problem."""
+    from autolist.channels.templates import load_reply, load_signature
+    from autolist.llm.prompt_loader import load_prompt
+
+    problems: list[str] = []
+    for name in PROMPTS_IN_USE:
+        try:
+            load_prompt(name)
+        except Exception as exc:
+            problems.append(f"prompt {name}: {type(exc).__name__}")
+    try:
+        load_signature()
+    except Exception as exc:
+        problems.append(f"reply _signature: {type(exc).__name__}")
+    for name in REPLIES_IN_USE:
+        try:
+            load_reply(name)
+        except Exception as exc:
+            problems.append(f"reply {name}: {type(exc).__name__}")
+    return problems
+
+
 TASK_DEADLINE_MARGIN_S = 60  # the task waits a bit longer than the step limit
 
 
@@ -140,6 +206,7 @@ def health() -> dict[str, Any]:  # pragma: no cover - live only
         report["mailbox"] = status.details
         report["mailbox_problems"] = status.problems
         problems += [p for p in status.problems if "watch" not in p]
+        problems += text_problems()
     except Exception as exc:
         problems.append(type(exc).__name__)
     report["problems"] = problems
