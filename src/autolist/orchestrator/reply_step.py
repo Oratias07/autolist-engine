@@ -2,21 +2,22 @@
 
 Exact commands first, without a model: "מאשר", "בטל", "תמונה 1", "תמונה 2" (the words are in
 the store repo). Approval binds to the latest preview: the reply's In-Reply-To must be that
-email's Message-ID. "מאשר" with other text never approves. Any other reply goes to the
-classifier, which arrives in the next PR; until then the developer is alerted.
+email's Message-ID. "מאשר" with other text never approves. Any other reply goes to
+``classify_reply`` (no approve or cancel intent exists there): facts, a wording or image
+request (the developer), a status question, something else (out of scope), or unclear (one
+question, nothing changes).
 """
 
 from __future__ import annotations
 
 from typing import Literal
 
+from autolist.agent_runtime.classifier import classify_reply
 from autolist.agent_runtime.commands import mentions, parse_command
-from autolist.channels.email.mail_sender import MAX_OUT_ATTACHMENT_BYTES
-from autolist.channels.email.own_attachment import fetch_own_attachment
-from autolist.core.models import ChannelMessage, Job, JobState, JobVersion, ListingText
+from autolist.core.models import ChannelMessage, Job, JobState, ReplyIntent
 from autolist.core.state_machine import FINAL, transition
-from autolist.images.postprocess import postprocess
-from autolist.orchestrator.generate_step import job_photos
+from autolist.orchestrator.new_version import limit_reached, new_version
+from autolist.orchestrator.reply_facts import apply_facts
 from autolist.orchestrator.runtime import (
     JOB_TASK_PATH,
     Runtime,
@@ -25,11 +26,6 @@ from autolist.orchestrator.runtime import (
     send,
     to_owner,
 )
-from autolist.review.preview import IMAGE_NAMES, build_preview
-
-
-class ReplyHandlingNotReady(NotImplementedError):
-    """A reply that is not an exact command: the classifier arrives in the next PR."""
 
 
 def status_line(rt: Runtime, job: Job) -> str:
@@ -98,78 +94,20 @@ def _choose_image(
     if choice == 2 and 2 not in latest.image_options:
         _job_mail(rt, job, msg, "image_2_unavailable")
         return {"job_id": job.job_id, "reply": "no_image_2"}
-    limit: int = rt.config.require("agent.max_revision_rounds")
-    if len(job.versions) > limit:
-        alert_developer(rt, job.job_id, "revision_limit", job.state, f"{len(job.versions)}")
-        _job_mail(rt, job, msg, "change_not_supported")
+    if limit_reached(rt, job, msg):
         return {"job_id": job.job_id, "reply": "revision_limit"}
-
-    px: int = rt.config.require("images.output_px")
-    image_1 = postprocess(job_photos(rt, job)[0].data, px)
-    image_2 = None
-    if 2 in latest.image_options:
-        if latest.preview_gmail_id is None:
-            raise RuntimeError(
-                f"{job.job_id}: the preview id of version {latest.number} is missing"
-            )
-        image_2 = fetch_own_attachment(
-            rt.gmail(),
-            latest.preview_gmail_id,
-            IMAGE_NAMES[2],
-            config=rt.config.channels.email,
-            max_bytes=MAX_OUT_ATTACHMENT_BYTES,
-        )
-    text = ListingText(
-        title=latest.title,
-        description_html=latest.description_html,
-        description_text=latest.description_text,
-        open_points=latest.open_points,
-        problems=[],
-    )
-    number = latest.number + 1
-    preview = build_preview(
-        job,
-        version=number,
-        text=text,
-        image_1=image_1,
-        image_2=image_2,
-        owner_choice=choice,
-        labels=rt.labels,
-        to=rt.owner,
-        in_reply_to=msg.rfc_message_id,
-    )
-    message = preview.message.model_copy(
-        update={
-            "variables": {
-                **preview.message.variables,
-                "image_note": rt.fragment(preview.image_note_template, {}),
-            }
-        }
-    )
-    sent, saved = send(rt, message, job)
-    job = saved or job
-    version = latest.model_copy(
-        update={
-            "number": number,
-            "created_at": rt.now(),
-            "image_choice": preview.image_choice,
-            "image_options": preview.image_options,
-            "preview_gmail_id": sent.gmail_id,
-            "preview_rfc_message_id": sent.rfc_message_id,
-        }
-    )
-    job = job.model_copy(
-        update={
-            "versions": [*job.versions, JobVersion.model_validate(version.model_dump())],
-            "revision_count": job.revision_count + 1,
-        }
-    )
-    job = transition(job, JobState.AWAITING_APPROVAL, rt.now())
-    rt.jobs.save(job)
+    new_version(rt, job, msg, owner_choice=choice)
     return {"job_id": job.job_id, "reply": f"image_{choice}"}
 
 
-def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
+def _context(rt: Runtime, job: Job) -> str:
+    """Trusted context only: no owner text, so a product name cannot carry an instruction."""
+    known = ", ".join(sorted({f.key for f in job.facts})) or "-"
+    version = str(job.versions[-1].number) if job.versions else "-"
+    return f"state: {job.state}\nlatest preview version: {version}\nknown details: {known}"
+
+
+async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
     if job.state in FINAL:
         return _status(rt, job, msg)
     command = parse_command(msg.text, rt.commands)
@@ -190,5 +128,34 @@ def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
     if waiting and mentions(msg.text, rt.commands["approve"]):
         _job_mail(rt, job, msg, "approve_with_text", version=str(job.versions[-1].number))
         return {"job_id": job.job_id, "reply": "approve_with_text"}
-    alert_developer(rt, job.job_id, "reply_not_handled", job.state, msg.message_id)
-    raise ReplyHandlingNotReady(job.job_id)
+    c = classify_reply(msg, llm=rt.llm, job_context=_context(rt, job), job_id=job.job_id)
+    if c.intent == ReplyIntent.STATUS:
+        return _status(rt, job, msg)
+    if c.intent == ReplyIntent.OTHER:
+        send(
+            rt,
+            to_owner(
+                "out_of_scope",
+                {"original_subject": msg.subject or ""},
+                to=rt.owner,
+                thread_id=job.thread_id,
+                in_reply_to=msg.rfc_message_id,
+            ),
+            job,
+        )
+        return {"job_id": job.job_id, "reply": "out_of_scope"}
+    if c.intent == ReplyIntent.WORDING_OR_IMAGE:
+        alert_developer(rt, job.job_id, "change_request", job.state, msg.text[:1000])
+        _job_mail(rt, job, msg, "change_not_supported")
+        return {"job_id": job.job_id, "reply": "change_not_supported"}
+    if c.intent == ReplyIntent.FACTS and job.state in (
+        JobState.NEEDS_INFO,
+        JobState.AWAITING_APPROVAL,
+    ):
+        if c.also_wording_or_image:
+            alert_developer(rt, job.job_id, "change_request", job.state, msg.text[:1000])
+        return await apply_facts(rt, job, msg, c)
+    if c.intent == ReplyIntent.FACTS:
+        return _status(rt, job, msg)  # working on it now (RECEIVED, GENERATING, PUBLISHING)
+    _job_mail(rt, job, msg, "reply_unclear", question=c.question)
+    return {"job_id": job.job_id, "reply": "unclear"}

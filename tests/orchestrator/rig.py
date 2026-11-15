@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 from PIL import Image
 
+from autolist.agent_runtime.classifier import ClassifiedReply
 from autolist.content.writer import DescriptionOut, TitleOut
 from autolist.core.blob_store import InMemoryBlobStore
 from autolist.core.config import parse_store_config
@@ -158,6 +159,13 @@ def extraction(items: list[dict[str, Any]], **over: Any) -> dict[str, Any]:
     return base
 
 
+def classified(intent: str, question: str = "", also: bool = False, **facts: Any) -> dict[str, Any]:
+    base = {k: q() for k in ("name", "price", "sale_price", "quantity", "model", "barcode")}
+    base["keywords"] = q()
+    base.update(facts)
+    return {"intent": intent, "facts": base, "also_wording_or_image": also, "question": question}
+
+
 TITLE = TitleOut(title="כיסא משרדי C1", fact_ids=["F1", "F2"], open_points=[])
 DESC = DescriptionOut.model_validate(
     {
@@ -177,6 +185,7 @@ DESC = DescriptionOut.model_validate(
 class FakeLLM:
     def __init__(self, extract: dict[str, Any], *, title: TitleOut = TITLE) -> None:
         self.extract, self.title = extract, title
+        self.classify: dict[str, Any] = classified("unclear")
         self.prompts: list[str] = []
         self.error: Exception | None = None
 
@@ -190,6 +199,9 @@ class FakeLLM:
             ),
             "write_title": lambda: self.title,
             "write_description": lambda: DESC,
+            "classify_reply": lambda: ClassifiedReply.model_validate_json(
+                json.dumps(self.classify)
+            ),
         }[req.prompt]()
         return LLMResult(
             parsed=parsed, text=None, model="m", input_tokens=1, output_tokens=1, usd=Decimal(0)

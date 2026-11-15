@@ -1,0 +1,96 @@
+"""A reply that corrects or supplies product details (classify_reply intent ``facts``).
+
+- NEEDS_INFO: merge, then ask again for what is still missing, or run the duplicate check and
+  move to GENERATING.
+- AWAITING_APPROVAL: merge and send a new version. The text is written again only when a fact
+  the writer uses changed (name, model, barcode, keywords: the title shows the model, so the
+  doc's "only if the name changed" is extended to every writer fact). Images are not generated
+  again. Price and quantity never enter the text.
+"""
+
+from __future__ import annotations
+
+from autolist.content.writer import write_listing, writer_facts
+from autolist.core.models import ChannelMessage, Job, JobState, ReplyClassification
+from autolist.core.playbook import require
+from autolist.core.state_machine import transition
+from autolist.orchestrator.duplicate_check import cancel_if_duplicate
+from autolist.orchestrator.new_version import limit_reached, new_version
+from autolist.orchestrator.runtime import (
+    JOB_TASK_PATH,
+    Runtime,
+    numbered,
+    product_name,
+    send,
+    to_owner,
+)
+
+
+def _ask(rt: Runtime, job: Job, msg: ChannelMessage, questions: list[str]) -> Job:
+    _, saved = send(
+        rt,
+        to_owner(
+            "needs_info",
+            {
+                "job_id": job.job_id,
+                "product_name": product_name(job),
+                "questions_list": numbered(questions),
+            },
+            to=rt.owner,
+            thread_id=job.thread_id,
+            in_reply_to=msg.rfc_message_id,
+        ),
+        job,
+    )
+    return saved or job
+
+
+async def apply_facts(
+    rt: Runtime, job: Job, msg: ChannelMessage, c: ReplyClassification
+) -> dict[str, str]:
+    unverified = [rt.labels[k] for k in c.unverified_fields]
+    extra = [c.question] if c.question else []
+    merged = job.model_copy(update={"facts": [*job.facts, *c.facts]})
+
+    if job.state == JobState.NEEDS_INFO:
+        required: list[str] = require(rt.playbook, "listing.required")
+        have = {f.key for f in merged.facts} | ({"photo"} if merged.photo_indexes else set())
+        missing = [rt.labels[k] for k in required if k not in have]
+        questions = [*missing, *unverified, *extra]
+        if questions:
+            merged = transition(merged, JobState.NEEDS_INFO, rt.now())
+            rt.jobs.save(merged)
+            _ask(rt, merged, msg, questions)
+            return {"job_id": job.job_id, "reply": "needs_info"}
+        rt.jobs.save(merged)
+        if await cancel_if_duplicate(rt, merged) is not None:
+            return {"job_id": job.job_id, "reply": "duplicate"}
+        merged = transition(merged, JobState.GENERATING, rt.now())
+        rt.jobs.save(merged)
+        rt.queue.enqueue(JOB_TASK_PATH, {"event": "generate", "job_id": job.job_id})
+        return {"job_id": job.job_id, "reply": "generating"}
+
+    # AWAITING_APPROVAL
+    if not c.facts:
+        _ask(rt, job, msg, [*unverified, *extra])
+        return {"job_id": job.job_id, "reply": "needs_info"}
+    if limit_reached(rt, job, msg):
+        return {"job_id": job.job_id, "reply": "revision_limit"}
+    text = None
+    if writer_facts(merged.facts) != writer_facts(job.facts):
+        text = write_listing(
+            merged.facts,
+            llm=rt.llm,
+            playbook=rt.playbook,
+            glossary=rt.glossary,
+            voice=rt.voice,
+            job_id=job.job_id,
+        )
+        if text.problems:
+            raise RuntimeError(f"text checks failed: {text.problems}")
+    rt.jobs.save(merged)
+    new_version(rt, merged, msg, owner_choice=merged.versions[-1].owner_choice, text=text)
+    if unverified or extra:
+        current = rt.jobs.get(job.job_id) or merged
+        _ask(rt, current, msg, [*unverified, *extra])
+    return {"job_id": job.job_id, "reply": "new_version"}
