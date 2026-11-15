@@ -117,3 +117,11 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 - **Attachments:** only JPEG images made by the system (the preview images). At most 4 per email and 5 MB each. Files received from outside are never sent on.
 - **`GmailSender.deliver(msg) -> SentMessage`:** sends, then reads back the thread id and the `Message-ID` header. Approval binds to that Message-ID through the owner's `In-Reply-To`.
 - **`templates.render_fragment(name, variables)`:** a template body without subject or signature, inserted into another reply (the image notes).
+
+## Amendment (2026-11-15, decision #36 by DEV): reading back the agent's own image
+`email/own_attachment.py` → `fetch_own_attachment(service, gmail_id, filename, *, config, max_bytes) -> bytes`.
+- Purpose: the generated image (image 2) is not stored. It waits in the sent preview email until "מאשר", and is read back from there.
+- Refuses with `SenderRejected` unless the message has Gmail's `SENT` label and its `From` address is `agent_mailbox`.
+- Refuses with `AttachmentRejected` unless exactly one part has that exact file name, it is `image/jpeg`, its size is within `max_bytes` before and after download, and the bytes start with the JPEG marker.
+- Read-only. The caller passes only the `preview_gmail_id` recorded on the job version being published.
+- Tests: `tests/channels/test_own_attachment.py`.
