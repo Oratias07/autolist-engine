@@ -81,7 +81,7 @@ The list lives in the store repo's playbook, not in code. Proposed content:
   - `printed_text` false → image 2 is preselected.
 
 ## Corrections in the fast track
-The reply to a preview is classified (`classify_reply` prompt, strict JSON, no tools):
+**Exact commands first (DEV, 15.11.2026).** "מאשר", "בטל", "תמונה 1" and "תמונה 2" are recognized without a model, and only when they are the whole reply (after the quote and signature are cut). A model can never approve. "מאשר" together with other text does not approve: the owner is asked to confirm the version as it is. Every other reply is classified (`classify_reply` prompt, strict JSON, no tools, and no `approve` class):
 
 | Class | What happens |
 | --- | --- |
