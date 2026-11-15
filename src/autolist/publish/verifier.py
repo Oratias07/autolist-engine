@@ -39,7 +39,8 @@ def created_problems(payload: Any, draft: ProductDraft, language_id: int) -> lis
         problems.append(f"price is {p.get('price')!r}")
     if _dec(p.get("quantity")) != Decimal(draft.quantity):
         problems.append(f"quantity is {p.get('quantity')!r}")
-    for field, want in (("sku", draft.sku), ("model", draft.model)):
+    checks = [("model", draft.model)] + ([("sku", draft.sku)] if draft.sku is not None else [])
+    for field, want in checks:
         if str(p.get(field) or "") != want:
             problems.append(f"{field} is {p.get(field)!r}")
     if not _is_truthy_flag(p.get("hidden")):

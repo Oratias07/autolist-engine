@@ -333,7 +333,7 @@ class ProductDraft(_Strict):
     description_html: str  # sanitized by the caller
     price: Decimal = Field(ge=0)
     quantity: int = Field(ge=0)
-    sku: str = Field(min_length=1)
+    sku: str | None = Field(min_length=1)  # supplier item code; None = not sent (decision 15.11)
     model: str = Field(min_length=1)
     upc: str | None
     main_image: ImageRef
