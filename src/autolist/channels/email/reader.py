@@ -10,7 +10,8 @@ Body text:
 - an unknown charset falls back to UTF-8 with replacement characters;
 - quoted history from earlier messages in the thread is cut ("On ... wrote:",
   the Hebrew Gmail line "בתאריך ... מאת ...:", and trailing ">" lines), and so is the
-  signature below the standard "-- " line (observed in a real owner email, 15.11.2026).
+  signature below the standard "-- " line (observed in a real owner email, 15.11.2026),
+  and a phone app's default "sent from" line when it is the last line (exact list below).
 
 Attachments: every part with a file name (attached or inline). A part larger than
 `max_bytes` is listed with no data and is never downloaded; the intake guard rejects it.
@@ -90,6 +91,26 @@ def html_to_text(html: str) -> str:
     return "".join(parser.out)
 
 
+# Default "sent from" lines that phone mail apps append (DEV 15.11.2026: expect them).
+# Only the LAST non-empty line is cut, only when it matches one of these exactly (after
+# direction marks and spacing are removed), so real content can never be cut by it.
+_DEVICE_LINES = re.compile(
+    r"(sent from my (iphone|ipad|android( device)?|samsung( galaxy)?( smartphone)?"
+    r"|galaxy|mobile( device)?)"
+    r"|get outlook for (ios|android)"
+    r"|sent from (outlook|yahoo mail|mail) for (iphone|ios|android)"
+    r"|נשלח מה-?(iphone|ipad) שלי"
+    r"|נשלח מ-?(iphone|ipad|android|samsung( galaxy)?|galaxy)( שלי)?"
+    r"|נשלח מהנייד( שלי)?|נשלח מהטלפון( הנייד)?( שלי)?)",
+    re.IGNORECASE,
+)
+
+
+def _device_line(line: str) -> bool:
+    plain = " ".join(_BIDI.sub("", line).replace("\u2011", "-").split()).rstrip(".")
+    return _DEVICE_LINES.fullmatch(plain) is not None
+
+
 def strip_quoted(text: str) -> str:
     lines = text.splitlines()
     for i, line in enumerate(lines):
@@ -101,6 +122,10 @@ def strip_quoted(text: str) -> str:
             break
     while lines and (lines[-1].lstrip().startswith(">") or not lines[-1].strip()):
         lines.pop()
+    if lines and _device_line(lines[-1]):
+        lines.pop()
+        while lines and not lines[-1].strip():
+            lines.pop()
     return "\n".join(lines).strip()
 
 
