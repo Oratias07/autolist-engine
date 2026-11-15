@@ -117,6 +117,9 @@ def test_strip_quoted_variants() -> None:
     assert strip_quoted("‏תשובה\n‫בתאריך יום א׳, 15 בנוב׳ מאת X <x@y>:‬\n> a") == "‏תשובה"
     assert strip_quoted("טקסט\n> ציטוט\n>\n") == "טקסט"
     assert strip_quoted("כתבתי: מחיר 5") == "כתבתי: מחיר 5"
+    assert strip_quoted("מחיר 449\nתודה\n\n--\n") == "מחיר 449\nתודה"
+    assert strip_quoted("מחיר 449\n-- \nיקיר, YTS\n050") == "מחיר 449"
+    assert strip_quoted("מידות 120--60") == "מידות 120--60"
 
 
 def test_html_to_text_keeps_line_breaks() -> None:
