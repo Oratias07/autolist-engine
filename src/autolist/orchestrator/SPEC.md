@@ -100,3 +100,11 @@ Entrypoints: `POST /tasks/job` (400 on a body without `event`, 500 on a step err
 Config used: `istores.catalog_page_size` (new, store.yaml; observed 100 in P0-05), `agent.*`, `images.model`, `images.output_px`.
 
 Acceptance (tests in `tests/orchestrator/`): P1-08 cases 2, 9, 10, 12, 13, 14 and the no-product, receipt-thread, budget, watchdog and redaction cases. Cases 1, 3, 4, 5 need reply handling and publish (next PR); 6 is covered by `channels` and the entrypoint tests.
+
+### Replies and publish (P1-07, decision DEV 15.11.2026)
+| File | What it wires |
+| --- | --- |
+| `reply_step.py` | A reply in a job's own thread. Final job → `status_reply`. Exact commands (`agent_runtime.commands`): `approve` only in `AWAITING_APPROVAL` and only when In-Reply-To is the latest preview's Message-ID (an older preview → `approve_old_version`; no preview → `approve_reply_to_preview`), then `PUBLISHING` and a `publish` task; `cancel` from `NEEDS_INFO`/`AWAITING_APPROVAL` → `CANCELLED` + `cancelled`; `image_1`/`image_2` → a new version with the same text and both images (image 2 read back from the previous preview; none generated → `image_2_unavailable`), at most `agent.max_revision_rounds` new versions, then the developer. "מאשר" with other text → `approve_with_text`. A command in the wrong state → `status_reply`. Any other reply alerts the developer and raises `ReplyHandlingNotReady` until the classifier lands. |
+| `publish_step.py` | The latest version: image 1 from the owner's email (guarded, postprocessed) or image 2 from the agent's own sent preview (`fetch_own_attachment`); to the bucket for the upload only, deleted in `finally`; `create_hidden` (duplicate check, hidden + disabled, verify); `SAVED_HIDDEN` + `saved_hidden`. No SKU (decision 15.11). A verify mismatch fails the job; the product stays hidden and disabled. |
+
+Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies `approve_with_text`, `approve_reply_to_preview`, `image_2_unavailable` (drafts for DEV).

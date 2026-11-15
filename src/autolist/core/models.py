@@ -383,6 +383,8 @@ class JobVersion(_Strict):
     created_at: datetime
     title: str
     description_html: str
+    description_text: str  # the same text as plain lines, for a later preview of this version
+    open_points: list[str] = Field(default_factory=list)  # shown again in a later preview
     image_choice: Literal[1, 2]
     image_options: list[Literal[1, 2]] = Field(default_factory=list)  # attached to the preview
     preview_gmail_id: str | None = None  # the sent preview; image 2 is read back from it (#36)

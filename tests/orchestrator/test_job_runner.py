@@ -9,7 +9,8 @@ import pytest
 from autolist.core.errors import CostCapExceeded
 from autolist.core.models import JobState
 from autolist.images.errors import BillingRequired, ImageNotReturned
-from autolist.orchestrator.job_runner import ReplyHandlingNotReady, run_task
+from autolist.orchestrator.job_runner import run_task
+from autolist.orchestrator.reply_step import ReplyHandlingNotReady
 from tests.orchestrator.rig import EMAIL_TEXT, Rig, email, extraction, item, q
 
 S = JobState
@@ -203,7 +204,7 @@ async def test_reply_in_job_thread_is_not_dropped_silently() -> None:
     rig = _rig(extraction([item()]))
     await _email(rig)
     await _generate(rig)
-    rig.messages["g3"] = email("מאשר", thread="jt2")
+    rig.messages["g3"] = email("המחיר 480", thread="jt2")
     with pytest.raises(ReplyHandlingNotReady):
         await _email(rig, "g3")
     assert rig.mail.templates()[-1] == "developer_alert"

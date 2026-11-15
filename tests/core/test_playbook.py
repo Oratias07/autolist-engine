@@ -56,3 +56,23 @@ def test_field_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (store / "agent" / "field_labels.yaml").write_text("labels:\n  price: 1\n")
     with pytest.raises(ConfigMissing):
         load_field_labels()
+
+
+def test_state_labels_and_commands(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from autolist.core.playbook import load_commands, load_state_labels
+
+    store = _store(tmp_path, "")
+    agent = store / "agent"
+    agent.mkdir()
+    (agent / "state_labels.yaml").write_text("labels:\n  FAILED: לא הושלם\n", encoding="utf-8")
+    words = "commands:\n  approve: מאשר\n  cancel: בטל\n  image_1: תמונה 1\n  image_2: תמונה 2\n"
+    (agent / "commands.yaml").write_text(words, encoding="utf-8")
+    monkeypatch.setenv("AUTOLIST_STORE_DIR", str(store))
+    assert load_state_labels() == {"FAILED": "לא הושלם"}
+    assert load_commands()["approve"] == "מאשר"
+    (agent / "commands.yaml").write_text("commands:\n  approve: מאשר\n", encoding="utf-8")
+    with pytest.raises(ConfigMissing):
+        load_commands()
+    (agent / "commands.yaml").write_text(words.replace("מאשר", "''"), encoding="utf-8")
+    with pytest.raises(ConfigMissing):
+        load_commands()

@@ -56,6 +56,19 @@ LABELS = {
     "sku": "sku-label",
     "_none": "אין",
 }
+STATES = {
+    "RECEIVED": "s-received",
+    "NEEDS_INFO": "s-needs-info",
+    "GENERATING": "s-generating",
+    "AWAITING_APPROVAL": "s-awaiting",
+    "PUBLISHING": "s-publishing",
+    "SAVED_HIDDEN": "s-saved",
+    "CANCELLED": "s-cancelled",
+    "FAILED": "s-failed",
+    "EXPIRED": "s-expired",
+    "_product_id": "pid",
+}
+COMMANDS = {"approve": "מאשר", "cancel": "בטל", "image_1": "תמונה 1", "image_2": "תמונה 2"}
 
 
 def png(color: str = "red", size: tuple[int, int] = (40, 30)) -> bytes:
@@ -249,6 +262,8 @@ class Rig:
     messages: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        self.posted: dict[str, Any] | None = None
+        self.store_overrides: dict[str, Any] = {}
         data = copy.deepcopy(VALID_STORE)
         data["istores"]["catalog_page_size"] = 100
         data["istores"]["required_name_languages"] = [3]
@@ -260,6 +275,7 @@ class Rig:
         self.mail = FakeMailer()
         self.queue = FakeQueue()
         self.jobs = InMemoryJobStore()
+        self.blobs = InMemoryBlobStore()
         self.ledger = CostLedger(
             self.config.costs, self.config.store.timezone, InMemoryLedgerStore()
         )
@@ -269,13 +285,15 @@ class Rig:
             glossary={"terms": []},
             voice="ענייני",
             labels=LABELS,
+            states=STATES,
+            commands=COMMANDS,
             jobs=self.jobs,
             gmail=self._gmail,
             mail=self.mail,
             llm=self.llm,
             images=self.images,
             istores=self._istores,
-            blobs=InMemoryBlobStore(),
+            blobs=self.blobs,
             ledger=self.ledger,
             queue=self.queue,
             fragment=lambda name, _v: f"<{name}>",
@@ -283,16 +301,47 @@ class Rig:
         )
 
     def _gmail(self) -> FakeGmail:
-        return _MessagesById(self.messages)
+        sent = {
+            f"s{i}": _as_sent(m, self.config.channels.email.agent_mailbox)
+            for i, m in enumerate(self.mail.sent, 1)
+        }
+        return _MessagesById({**self.messages, **sent})
 
     def _store(self, r: httpx.Request) -> httpx.Response:
-        if r.method == "GET" and r.url.path.startswith("/products/"):
+        path = r.url.path
+        if r.method == "GET" and path.count("/") == 3 and path.startswith("/products/"):
             return httpx.Response(200, json={"products": self.catalog})
+        if r.method == "POST" and path == "/products":
+            self.posted = json.loads(r.content)
+            return httpx.Response(200, text='"productID: 970"')
+        if r.method == "GET" and path == "/products/970" and self.posted is not None:
+            product = {
+                **self.posted,
+                "image": "https://cdn.istores.co.il/image/upload/clients/1/a.jpg",
+                "product_id": 970,
+                **self.store_overrides,
+            }
+            return httpx.Response(200, json={"product": product})
         return httpx.Response(500)
 
     def _istores(self) -> Any:
         client, _, _, _ = make_client(self._store, self.config)
         return client
+
+
+def _as_sent(msg: OutboundMessage, mailbox: str) -> dict[str, Any]:
+    parts = [
+        {
+            "mimeType": a.mime_type,
+            "filename": a.filename,
+            "body": {"size": a.size_bytes, "data": _b(a.data or b"")},
+        }
+        for a in msg.attachments
+    ]
+    return {
+        "labelIds": ["SENT"],
+        "payload": {"headers": [{"name": "From", "value": mailbox}], "parts": parts},
+    }
 
 
 class _MessagesById(FakeGmail):

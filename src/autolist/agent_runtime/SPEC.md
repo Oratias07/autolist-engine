@@ -1,8 +1,15 @@
 ---
 module: agent_runtime
-status: not-started      # written by Claude Code at the start of phase 3, approved by DEV before code
-phase: 3
+status: approved         # fast-track exact commands only (below), decision DEV 15.11.2026. The rest stays TBD for phase 3.
+phase: 1 (fast track) / 3
 ---
+
+## Fast track (phase 1) — exact reply commands (approved, DEV 15.11.2026)
+File: `commands.py`. Pure.
+- `parse_command(text, words) -> "approve" | "cancel" | "image_1" | "image_2" | None`: the reply (already cut of quote and signature by `channels`) is a command only when its whole text equals a command word from the store repo (`agent/commands.yaml`, loaded by `core.playbook.load_commands`). Normalizing removes direction marks, extra whitespace and one trailing period, nothing else.
+- `mentions(text, word)`: used only to refuse ("מאשר" with other text never approves).
+- No model is involved. A model can never approve.
+- Tests: `tests/agent_runtime/test_commands.py` ("לא מאשר", "מאשר אבל…", "מאשר!", a phone signature line: none is a command).
 
 # agent_runtime
 
