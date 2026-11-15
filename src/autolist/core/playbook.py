@@ -43,3 +43,15 @@ def load_voice_principles() -> str:
     if start not in text or end not in text:
         raise ConfigMissing("docs/voice.md voice principles section")
     return text[text.index(start) : text.index(end)].strip()
+
+
+def load_field_labels() -> dict[str, str]:
+    """Hebrew labels of owner fields for agent emails (store repo, agent/field_labels.yaml)."""
+    path = store_dir() / "agent" / "field_labels.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    labels = data.get("labels") if isinstance(data, dict) else None
+    if not isinstance(labels, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in labels.items()
+    ):
+        raise ConfigMissing("agent/field_labels.yaml labels")
+    return labels
