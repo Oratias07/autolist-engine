@@ -99,3 +99,15 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 - Every email is `multipart/alternative`: the plain text, plus the same text as HTML with `dir` and `lang` from `store.yaml` (`channels.email.text_direction`, `channels.email.language`).
 - In the HTML part, text is escaped (no template or variable markup is passed through), and blank lines become paragraphs.
 - Reason: the first live reply (P0-08) rendered left-to-right in Gmail.
+
+## Amendment (2026-11-15, fast-track design PR #39): reading a full email
+`email/reader.py`: `fetch_message(service, gmail_id, *, config, max_bytes) -> ChannelMessage`.
+
+- **Sender:** verified again from the full headers. A failure raises `SenderRejected` (defence in depth after `inbox.poll_accepted`).
+- **Text:**
+  - the first text/plain part; otherwise text/html reduced to plain text (no scripts or styles, Gmail quote blocks dropped);
+  - an unknown charset falls back to UTF-8 with replacement characters;
+  - quoted history is cut ("On ... wrote:", the Hebrew Gmail "בתאריך ... מאת ...:" line, trailing ">" lines);
+  - capped at 20,000 characters.
+- **Attachments:** every part with a file name, attached or inline. A part larger than `max_bytes` is listed without data and is never downloaded.
+- **Read-only:** no labels, no replies.
