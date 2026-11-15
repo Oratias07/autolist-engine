@@ -87,3 +87,28 @@ def test_safe_name_strips_paths_and_markup() -> None:
     assert safe_name("תמונה 1.jpg") == "תמונה 1.jpg"
     assert len(safe_name("a" * 300)) == 80
     assert safe_name("") == "attachment"
+
+
+def test_heic_is_accepted_and_converted_to_jpeg() -> None:
+    import pillow_heif
+
+    heif = pillow_heif.from_pillow(Image.new("RGB", (2000, 1500), (200, 10, 10)))
+    buf = io.BytesIO()
+    heif.save(buf, quality=80)
+    data = buf.getvalue()
+    types = ["image/jpeg", "image/heic"]
+    res = guard([_att("IMG_0001.HEIC", data, "image/heic")], _cfg(image_types=types))
+    assert res.rejected == []
+    out = Image.open(io.BytesIO(res.accepted[0].data))
+    assert out.format == "JPEG"
+    assert max(out.size) == 1568
+
+
+def test_heic_refused_when_not_listed() -> None:
+    import pillow_heif
+
+    heif = pillow_heif.from_pillow(Image.new("RGB", (100, 100)))
+    buf = io.BytesIO()
+    heif.save(buf)
+    res = guard([_att("a.heic", buf.getvalue(), "image/heic")], _cfg())
+    assert res.rejected == ["a.heic: not a supported image type"]

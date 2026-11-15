@@ -15,10 +15,20 @@ import re
 from dataclasses import dataclass
 
 from PIL import Image, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 from autolist.core.models import Attachment, IntakeConfig, ReferenceImage
 
-_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+# iPhone cameras save HEIC; Pillow reads it once this opener is registered. The photo is
+# re-encoded to JPEG below like any other, so nothing downstream ever sees HEIC.
+register_heif_opener()
+
+_FORMATS = {
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "WEBP": "image/webp",
+    "HEIF": "image/heic",  # Pillow reports HEIC and HEIF files as format "HEIF"
+}
 _SAFE_NAME = re.compile(r"[^\w.\-() ]+", re.UNICODE)
 
 
@@ -41,7 +51,10 @@ def _prepare(data: bytes, cfg: IntakeConfig) -> tuple[bytes, str]:
         if probe.width * probe.height > cfg.max_image_pixels:
             raise ValueError("image is too large")
     mime = _FORMATS.get(fmt)
-    if mime is None or mime not in cfg.image_types:
+    allowed = set(cfg.image_types)
+    if mime == "image/heic" and "image/heif" in allowed:
+        allowed.add("image/heic")
+    if mime is None or mime not in allowed:
         raise ValueError("not a supported image type")
     with Image.open(io.BytesIO(data)) as im:
         im.load()
