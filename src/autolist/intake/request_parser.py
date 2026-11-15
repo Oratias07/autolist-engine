@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from autolist.core.facts import owner_details
+from autolist.core.facts import owner_details, present_keys
 from autolist.core.models import (
     ChannelMessage,
     IntakeConfig,
@@ -127,7 +127,7 @@ def parse_request(
             )
         facts += owner_details(item.details, message, "email")
         photos = sorted({p for p in item.photo_indexes if p in valid_photos})
-        have = {f.key for f in facts} | ({"photo"} if photos else set())
+        have = present_keys({f.key for f in facts}, bool(photos))
         items.append(
             ProductRequest(
                 index=index,

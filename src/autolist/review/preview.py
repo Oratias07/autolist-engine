@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Literal
 
+from autolist.core.facts import store_model
 from autolist.core.models import Attachment, Job, ListingText, OutboundMessage, Preview
 
 TEMPLATE = "ready_for_approval"
@@ -53,11 +54,15 @@ def build_preview(
     if text.problems:
         raise PreviewError(f"text has failed checks: {text.problems}")
     facts: dict[str, str] = {}
-    for key in ("price", "quantity", "model"):
+    for key in ("price", "quantity"):
         fact = job.fact(key)
         if fact is None:
             raise PreviewError(f"required fact missing: {key}")
         facts[key] = fact.value
+    model = store_model(job)  # the model, else the item code (DEV 15.11.2026)
+    if model is None:
+        raise PreviewError("required fact missing: model or item code")
+    facts["model"] = model
 
     choice: Literal[1, 2]
     options: list[Literal[1, 2]]

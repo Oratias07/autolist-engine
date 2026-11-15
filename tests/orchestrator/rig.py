@@ -40,7 +40,7 @@ SECTIONS: list[dict[str, Any]] = [
     {"id": "benefits", "heading": "יתרונות:"},
 ]
 PLAYBOOK: dict[str, Any] = {
-    "listing": {"required": ["name", "price", "quantity", "model", "photo"]},
+    "listing": {"required": ["name", "price", "quantity", "model_or_item_code", "photo"]},
     "stock": {"subtract": True},
     "title": {"pattern": "x"},
     "description": {"sections": SECTIONS},
@@ -57,6 +57,7 @@ LABELS = {
     "photo": "תמונה",
     "sku": "sku-label",
     "item_code": "item-code-label",
+    "model_or_item_code": "model-or-item-code-label",
     "detail": "detail-label",
     "_none": "אין",
 }

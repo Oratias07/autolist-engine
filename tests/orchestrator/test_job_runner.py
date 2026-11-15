@@ -317,3 +317,21 @@ async def test_cost_alert_send_failure_does_not_fail_the_step() -> None:
     rig.mail.fail_on = None
     await _generate(rig)  # the alert was put back and goes out after the next step
     assert sum(1 for m in rig.mail.sent if m.template == "cost_alert") == 1
+
+
+async def test_item_code_without_a_model_is_enough_and_fills_the_model_field() -> None:
+    """DEV 15.11.2026 (YTS-1002): a model or an item code is required, not both."""
+    rig = Rig(extraction([item(model=q(), item_code=q("C1", "C1"))]))
+    rig.messages["g1"] = email(EMAIL_TEXT)
+    assert await _email(rig) == {"opened": ["T-1"]}
+    assert rig.jobs.get("T-1").state == S.GENERATING  # type: ignore[union-attr]
+    await _generate(rig)
+    preview = rig.mail.sent[-1]
+    assert preview.template == "ready_for_approval" and preview.variables["model"] == "C1"
+
+
+async def test_neither_model_nor_item_code_asks_once_for_either() -> None:
+    rig = Rig(extraction([item(model=q())]))
+    rig.messages["g1"] = email(EMAIL_TEXT)
+    await _email(rig)
+    assert rig.mail.sent[1].variables["questions_list"] == "1. model-or-item-code-label"

@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 
 from autolist.channels.email.mail_sender import MAX_OUT_ATTACHMENT_BYTES
 from autolist.channels.email.own_attachment import fetch_own_attachment
+from autolist.core.facts import store_model
 from autolist.core.models import Job, JobState, ProductDraft
 from autolist.core.playbook import require
 from autolist.core.state_machine import transition
@@ -26,6 +27,13 @@ def _fact(job: Job, key: str) -> str:
     if fact is None:
         raise RuntimeError(f"{job.job_id}: no {key} fact at publish")
     return fact.value
+
+
+def _store_model(job: Job) -> str:
+    model = store_model(job)
+    if model is None:
+        raise RuntimeError(f"{job.job_id}: no model or item code at publish")
+    return model
 
 
 def _image(rt: Runtime, job: Job) -> bytes:
@@ -61,7 +69,7 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
         price=price,
         quantity=quantity,
         sku=item_code.value if item_code else None,  # B-03; None: not sent (decision 15.11)
-        model=_fact(job, "model"),
+        model=_store_model(job),
         upc=barcode.value if barcode else None,
         stock_managed=bool(require(rt.playbook, "stock.subtract")),  # DEV 15.11: always on
         main_image=ref,

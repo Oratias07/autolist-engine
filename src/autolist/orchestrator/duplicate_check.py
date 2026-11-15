@@ -8,6 +8,7 @@ alone is checked (decision 15.11.2026).
 
 from __future__ import annotations
 
+from autolist.core.facts import store_model
 from autolist.core.models import Job, JobState
 from autolist.core.state_machine import transition
 from autolist.orchestrator.runtime import Runtime, original_subject, product_name, send, to_owner
@@ -16,14 +17,14 @@ from autolist.publish.publisher import find_duplicate
 
 async def cancel_if_duplicate(rt: Runtime, job: Job) -> Job | None:
     """Returns the cancelled job when the store already has the model, else None."""
-    model = job.fact("model")
+    model = store_model(job)
     if model is None:
-        raise RuntimeError(f"{job.job_id}: duplicate check needs the model")
+        raise RuntimeError(f"{job.job_id}: duplicate check needs a model or an item code")
     page_size: int = rt.config.require("istores.catalog_page_size")
     async with rt.istores() as client:
         item_code = job.fact("item_code")
         sku = item_code.value if item_code else None  # B-03: the item code is the SKU
-        dup = await find_duplicate(client, page_size, sku, model.value)
+        dup = await find_duplicate(client, page_size, sku, model)
     if dup is None:
         return None
     field, value, product_id = dup

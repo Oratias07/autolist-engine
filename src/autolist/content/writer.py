@@ -65,6 +65,9 @@ class DescriptionOut(_M):
 def writer_facts(facts: list[JobFact]) -> list[dict[str, str]]:
     """Latest fact per key, then every owner detail in order (once each), numbered F1.."""
     latest: dict[str, JobFact] = {f.key: f for f in facts}
+    if "model" not in latest and "item_code" in latest:
+        # the item code fills the store's model field (DEV 15.11.2026), so the text uses it too
+        latest["model"] = latest["item_code"]
     texts = [f"{key}: {latest[key].value}" for key in WRITER_KEYS if key in latest]
     details = list(dict.fromkeys(f.value for f in facts if f.key == DETAIL))
     texts += [f"detail: {d}" for d in details]
