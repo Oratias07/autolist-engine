@@ -49,6 +49,7 @@ def build_preview(
     labels: dict[str, str],
     to: str,
     in_reply_to: str | None,
+    category: str,
 ) -> Preview:
     """``job.thread_id`` None opens the job's own thread (first agent email for the job)."""
     if text.problems:
@@ -100,6 +101,7 @@ def build_preview(
             "price": facts["price"],
             "quantity": facts["quantity"],
             "model": facts["model"],
+            "category": category,
             "description_text": text.description_text,
             "optional_missing": ", ".join(missing) if missing else labels["_none"],
         },

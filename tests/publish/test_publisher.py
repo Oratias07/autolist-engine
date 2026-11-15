@@ -32,6 +32,7 @@ def _draft(blobs: InMemoryBlobStore, **kw: Any) -> ProductDraft:
         "model": "M-1",
         "upc": None,
         "stock_managed": True,
+        "category_ids": [],
         "main_image": ref,
         "extra_images": [],
     }
@@ -55,7 +56,9 @@ class Store:
             return httpx.Response(200, text='"productID: 970"')
         if r.method == "GET":
             assert self.posted is not None
-            p = {**self.posted, "image": CDN, "product_id": 970, **self.overrides}
+            # read shape observed in P1-02: categories come back as an object keyed by id
+            cats = {str(i): [{"category_id": i}] for i in self.posted.get("product_category", [])}
+            p = {**self.posted, "image": CDN, "product_id": 970, "category": cats, **self.overrides}
             return httpx.Response(200, json={"product": p})
         return httpx.Response(500)
 
@@ -176,3 +179,16 @@ async def test_stock_management_is_sent() -> None:
     store = Store()
     await _run(store, _draft(blobs), blobs)
     assert store.posted is not None and store.posted["subtract"] == 1
+
+
+async def test_categories_are_sent_and_verified() -> None:
+    blobs = InMemoryBlobStore()
+    store = Store()
+    await _run(store, _draft(blobs, category_ids=[97008]), blobs)
+    assert store.posted is not None and store.posted["product_category"] == [97008]
+
+
+async def test_a_missing_category_on_the_store_fails_the_verify() -> None:
+    blobs = InMemoryBlobStore()
+    with pytest.raises(VerifyMismatch, match="categories"):
+        await _run(Store(category={}), _draft(blobs, category_ids=[97008]), blobs)

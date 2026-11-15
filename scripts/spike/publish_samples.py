@@ -71,6 +71,7 @@ async def main() -> None:
                 price=Decimal(str(manifest["price"])),
                 quantity=int(item["quantity"]),
                 stock_managed=True,  # DEV 15.11.2026: always on
+                category_ids=[],  # samples: no category
                 sku=item["sku"],
                 model=item["model"],
                 upc=None,

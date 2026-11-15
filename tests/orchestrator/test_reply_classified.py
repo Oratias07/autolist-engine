@@ -174,3 +174,17 @@ async def test_unclear_answer_while_a_required_detail_is_missing_still_asks() ->
     await _open(rig)
     out = await _reply(rig, "נו?", classified("unclear", question="מה המחיר?"))
     assert out["reply"] == "unclear" and _job(rig).state == S.NEEDS_INFO
+
+
+async def test_category_in_a_reply_chooses_again_without_rewriting_the_text() -> None:
+    rig = await _ready()
+    rig.llm.category = {"primary": 12, "secondary": None, "clear": True, "question": ""}
+    out = await _reply(
+        rig, "קטגוריה: ציוד משרדי", classified("facts", category_hint=q("ציוד משרדי", "ציוד משרדי"))
+    )
+    assert out["reply"] == "new_version"
+    v2 = _job(rig).versions[-1]
+    assert (v2.number, v2.category_ids, v2.category_names) == (2, [12], ["ציוד משרדי"])
+    assert rig.llm.requests[-1].variables["owner_category"] == "ציוד משרדי"
+    assert rig.llm.prompts.count("write_title") == 1
+    assert rig.mail.sent[-1].variables["category"] == "ציוד משרדי"

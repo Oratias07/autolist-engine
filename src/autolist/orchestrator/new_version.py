@@ -11,11 +11,18 @@ from typing import Literal
 
 from autolist.channels.email.mail_sender import MAX_OUT_ATTACHMENT_BYTES
 from autolist.channels.email.own_attachment import fetch_own_attachment
-from autolist.core.models import ChannelMessage, Job, JobState, ListingText
+from autolist.core.models import CategoryChoice, ChannelMessage, Job, JobState, ListingText
 from autolist.core.state_machine import transition
 from autolist.images.postprocess import postprocess
 from autolist.orchestrator.generate_step import job_photos
-from autolist.orchestrator.runtime import Runtime, alert_developer, product_name, send, to_owner
+from autolist.orchestrator.runtime import (
+    Runtime,
+    alert_developer,
+    category_text,
+    product_name,
+    send,
+    to_owner,
+)
 from autolist.review.preview import IMAGE_NAMES, build_preview
 
 
@@ -46,6 +53,7 @@ def new_version(
     *,
     owner_choice: Literal[1, 2] | None,
     text: ListingText | None = None,
+    category: CategoryChoice | None = None,
 ) -> Job:
     latest = job.versions[-1]
     px: int = rt.config.require("images.output_px")
@@ -81,6 +89,7 @@ def new_version(
         labels=rt.labels,
         to=rt.owner,
         in_reply_to=msg.rfc_message_id,
+        category=category_text(rt, category.names if category else latest.category_names),
     )
     message = preview.message.model_copy(
         update={
@@ -100,6 +109,8 @@ def new_version(
             "description_html": text.description_html,
             "description_text": text.description_text,
             "open_points": text.open_points,
+            "category_ids": category.category_ids if category else latest.category_ids,
+            "category_names": category.names if category else latest.category_names,
             "image_choice": preview.image_choice,
             "owner_choice": owner_choice,
             "image_options": preview.image_options,

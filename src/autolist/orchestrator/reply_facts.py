@@ -15,6 +15,7 @@ from autolist.core.facts import present_keys
 from autolist.core.models import ChannelMessage, Job, JobState, ReplyClassification
 from autolist.core.playbook import require
 from autolist.core.state_machine import transition
+from autolist.orchestrator.category_step import choose_for
 from autolist.orchestrator.duplicate_check import cancel_if_duplicate
 from autolist.orchestrator.new_version import limit_reached, new_version
 from autolist.orchestrator.runtime import (
@@ -94,8 +95,18 @@ async def apply_facts(
         )
         if text.problems:
             raise RuntimeError(f"text checks failed: {text.problems}")
+    category = None
+    if any(f.key == "category_hint" for f in c.facts):
+        category = await choose_for(rt, merged)  # the owner named a category: choose again
     rt.jobs.save(merged)
-    new_version(rt, merged, msg, owner_choice=merged.versions[-1].owner_choice, text=text)
+    new_version(
+        rt,
+        merged,
+        msg,
+        owner_choice=merged.versions[-1].owner_choice,
+        text=text,
+        category=category,
+    )
     if unverified or extra:
         current = rt.jobs.get(job.job_id) or merged
         _ask(rt, current, msg, [*unverified, *extra])

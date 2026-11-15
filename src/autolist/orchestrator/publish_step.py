@@ -71,6 +71,7 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
         sku=item_code.value if item_code else None,  # B-03; None: not sent (decision 15.11)
         model=_store_model(job),
         upc=barcode.value if barcode else None,
+        category_ids=version.category_ids,
         stock_managed=bool(require(rt.playbook, "stock.subtract")),  # DEV 15.11: always on
         main_image=ref,
         extra_images=[],

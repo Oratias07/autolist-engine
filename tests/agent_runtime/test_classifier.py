@@ -18,6 +18,7 @@ def _out(intent: str = "facts", **facts: Any) -> dict[str, Any]:
     base = {k: _q() for k in ("name", "price", "sale_price", "quantity", "model", "barcode")}
     base["keywords"] = _q()
     base["item_code"] = _q()
+    base["category_hint"] = _q()
     base["details"] = []
     base.update(facts)
     return {"intent": intent, "facts": base, "also_wording_or_image": False, "question": ""}

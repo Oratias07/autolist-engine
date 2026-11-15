@@ -62,9 +62,10 @@ def main() -> None:
     cfg = load_store_config()
     samples = store_dir() / "fixtures" / "samples"
     data = yaml.safe_load((samples / "p1-07-classify.yaml").read_text(encoding="utf-8"))
-    extra = samples / "p1-08-classify-v2.yaml"
-    if extra.exists():
-        data["cases"] += yaml.safe_load(extra.read_text(encoding="utf-8"))["cases"]
+    for name in ("p1-08-classify-v2.yaml", "p1-09-classify-v3.yaml"):
+        extra = samples / name
+        if extra.exists():
+            data["cases"] += yaml.safe_load(extra.read_text(encoding="utf-8"))["cases"]
     ledger_path = args.out / "fixtures" / "ledger" / "p0-anthropic.json"
     ledger = CostLedger(cfg.costs, cfg.store.timezone, JsonFileLedgerStore(ledger_path))
     llm = AnthropicClient(cfg, get_secret(cfg, "anthropic_api_key"), ledger)

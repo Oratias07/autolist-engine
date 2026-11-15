@@ -58,6 +58,8 @@ def build_body(draft: ProductDraft, language_id: int, image_url: str) -> dict[st
         "model": draft.model,
         "image": image_url,
     }
+    if draft.category_ids:  # observed in P1-02 (create and PUT)
+        body["product_category"] = list(draft.category_ids)
     if draft.sku is not None:  # unknown: not sent; iStores fills its own value (P0-05)
         body["sku"] = draft.sku
     if draft.upc is not None:
