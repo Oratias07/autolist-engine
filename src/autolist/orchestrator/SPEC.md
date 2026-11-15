@@ -71,7 +71,7 @@ Files: `entrypoints.py` (Starlette app, wiring only) and `tasks_queue.py` (Cloud
 
 | Route | Behaviour |
 | --- | --- |
-| `GET /healthz` | Returns the injected health report; 503 when it is not ok. |
+| `GET /health` | Returns the injected health report; 503 when it is not ok. |
 | `POST /events/gmail` | Refuses a body that is not a Pub/Sub push (400). Otherwise calls `channels.email.inbox.poll_accepted` and enqueues one `/tasks/job` task per accepted message. |
 | `POST /cron/renew-watch` | Calls `channels.email.inbox.renew_watch` and returns the new expiry. |
 

@@ -9,7 +9,7 @@
 #   REGION    region of the Cloud Run service and Scheduler jobs
 #   SERVICE   Cloud Run service name (autolist-<stage>)
 #   TOPIC     Pub/Sub topic that Gmail watch publishes to (channels.email.pubsub_topic)
-#   CI_SA     email of the CI service account (deploy workflow calls /healthz)
+#   CI_SA     email of the CI service account (deploy workflow calls /health)
 #   TIME_ZONE time zone of the scheduler jobs (store.timezone)
 set -euo pipefail
 
@@ -67,7 +67,7 @@ job "${SERVICE}-watchdog" "43 6 * * *" "/cron/watchdog"
 
 say "5/5 start listening now: renew the Gmail watch once"
 $G scheduler jobs run "${SERVICE}-renew-watch" --location="${REGION}"
-echo "renew-watch triggered; check /healthz from the deploy workflow"
+echo "renew-watch triggered; check /health from the deploy workflow"
 
 say "summary"
 echo "push:      $($G pubsub subscriptions describe "${SUB}" --format='value(pushConfig.pushEndpoint)')"

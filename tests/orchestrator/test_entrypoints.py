@@ -160,9 +160,9 @@ def test_renew_watch_sets_cursor_when_none() -> None:
 
 def test_healthz_reports_problem_as_503() -> None:
     rig = Rig({})
-    assert rig.client.get("/healthz").status_code == 200
+    assert rig.client.get("/health").status_code == 200
     rig.health = {"ok": False, "problems": ["firestore"]}
-    assert rig.client.get("/healthz").status_code == 503
+    assert rig.client.get("/health").status_code == 503
 
 
 class FakeTasksClient:
