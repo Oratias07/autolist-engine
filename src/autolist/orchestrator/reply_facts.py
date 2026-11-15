@@ -26,6 +26,13 @@ from autolist.orchestrator.runtime import (
 )
 
 
+def missing_required(rt: Runtime, job: Job) -> list[str]:
+    """Required fields the job still lacks (``photo`` counts when it has photo indexes)."""
+    required: list[str] = require(rt.playbook, "listing.required")
+    have = {f.key for f in job.facts} | ({"photo"} if job.photo_indexes else set())
+    return [k for k in required if k not in have]
+
+
 def _ask(rt: Runtime, job: Job, msg: ChannelMessage, questions: list[str]) -> Job:
     _, saved = send(
         rt,
@@ -53,9 +60,7 @@ async def apply_facts(
     merged = job.model_copy(update={"facts": [*job.facts, *c.facts]})
 
     if job.state == JobState.NEEDS_INFO:
-        required: list[str] = require(rt.playbook, "listing.required")
-        have = {f.key for f in merged.facts} | ({"photo"} if merged.photo_indexes else set())
-        missing = [rt.labels[k] for k in required if k not in have]
+        missing = [rt.labels[k] for k in missing_required(rt, merged)]
         questions = [*missing, *unverified, *extra]
         if questions:
             merged = transition(merged, JobState.NEEDS_INFO, rt.now())

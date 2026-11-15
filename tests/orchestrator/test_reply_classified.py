@@ -156,3 +156,21 @@ async def test_owner_details_in_a_reply_rewrite_the_text_not_the_images() -> Non
     assert [f.value for f in job.facts if f.key == "detail"] == ["לכל סוגי המשטחים"]
     assert rig.llm.prompts.count("write_description") == 2
     assert len(rig.images.requests) == 1
+
+
+async def test_answer_to_a_model_question_with_nothing_missing_goes_on() -> None:
+    """The photo check (extract v3 rule 11a) asks a question although nothing is missing."""
+    rig = Rig(extraction([item()], questions=["האם זו התמונה הנכונה למוצר?"]))
+    await _open(rig)
+    assert _job(rig).state == S.NEEDS_INFO
+    out = await _reply(rig, "כן", classified("unclear", question="מה התכוונת?"))
+    assert out["reply"] == "generating"
+    assert _job(rig).state == S.GENERATING
+    assert rig.mail.templates()[-1] != "reply_unclear"
+
+
+async def test_unclear_answer_while_a_required_detail_is_missing_still_asks() -> None:
+    rig = Rig(extraction([item(price=q())]))
+    await _open(rig)
+    out = await _reply(rig, "נו?", classified("unclear", question="מה המחיר?"))
+    assert out["reply"] == "unclear" and _job(rig).state == S.NEEDS_INFO
