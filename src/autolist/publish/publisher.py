@@ -20,10 +20,13 @@ MAX_PAGES = 100
 
 
 async def find_duplicate(
-    client: IStoresClient, page_size: int, sku: str, model: str
+    client: IStoresClient, page_size: int, sku: str | None, model: str
 ) -> tuple[str, str, object] | None:
     """Scan the catalog for a product with the same SKU or model (no server-side search is
-    recorded in the field map). Returns (field, value, product_id) or None."""
+    recorded in the field map). Returns (field, value, product_id) or None.
+
+    ``sku`` None (not known) checks the model only; a store SKU is never matched against an
+    empty value."""
     for page in range(1, MAX_PAGES + 1):
         data = await client.list_products(limit=page_size, page=page)
         products = data.get("products") if isinstance(data, Mapping) else None
@@ -32,7 +35,7 @@ async def find_duplicate(
         for p in products:
             if not isinstance(p, Mapping):
                 continue
-            if str(p.get("sku") or "") == sku:
+            if sku is not None and str(p.get("sku") or "") == sku:
                 return ("sku", sku, p.get("product_id"))
             if str(p.get("model") or "") == model:
                 return ("model", model, p.get("product_id"))
@@ -51,10 +54,11 @@ def build_body(draft: ProductDraft, language_id: int, image_url: str) -> dict[st
         "quantity": draft.quantity,
         "hidden": 1,
         "status": 0,
-        "sku": draft.sku,
         "model": draft.model,
         "image": image_url,
     }
+    if draft.sku is not None:  # unknown: not sent; iStores fills its own value (P0-05)
+        body["sku"] = draft.sku
     if draft.upc is not None:
         body["upc"] = draft.upc
     return body

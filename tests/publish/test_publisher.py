@@ -151,3 +151,19 @@ async def test_upc_is_sent_when_present() -> None:
     await _run(store, _draft(blobs, upc="7290000000001"), blobs)
     assert store.posted is not None
     assert store.posted["upc"] == "7290000000001"
+
+
+async def test_unknown_sku_is_not_sent_and_dup_check_uses_model_only() -> None:
+    blobs = InMemoryBlobStore()
+    # a store product with an empty SKU must not match an unknown SKU; iStores fills its own
+    store = Store(catalog=[{"sku": "", "model": "other"}], sku="0a53773d" * 4)
+    pid, _, _ = await _run(store, _draft(blobs, sku=None), blobs)
+    assert pid == 970
+    assert store.posted is not None and "sku" not in store.posted
+
+
+async def test_unknown_sku_duplicate_model_found() -> None:
+    blobs = InMemoryBlobStore()
+    store = Store(catalog=[{"sku": "x", "model": "M-1", "product_id": 5}])
+    with pytest.raises(DuplicateProduct):
+        await _run(store, _draft(blobs, sku=None), blobs)

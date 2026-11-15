@@ -129,13 +129,13 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
 - `description_html` (already sanitized by the caller)
 - `price: Decimal`
 - `quantity: int`
-- `sku`, `model`
+- `sku: str | None` (supplier item code; `None` when not known, then it is not sent and iStores fills its own value; decision 15.11.2026), `model`
 - `upc: str | None`
 - `main_image: ImageRef` (bucket object name)
 - `extra_images: list[ImageRef]`
 
 **`publisher.create_hidden(draft) -> CreatedProduct`**
-1. Duplicate check: scan the catalog pages for the same `sku` or `model` (the playbook's `unique_check`; no server-side search is recorded in the field map). A hit raises `DuplicateProduct`, and nothing is created.
+1. Duplicate check: scan the catalog pages for the same `sku` (only when known) or `model` (the playbook's `unique_check`; no server-side search is recorded in the field map). A hit raises `DuplicateProduct`, and nothing is created.
 2. Sign the main image with `core.blob_store.signed_url(ref, ttl)`. The TTL comes from `store.yaml` (`publishing.image_url_ttl_s`). The URL is never logged.
 3. `client.create_product(body)` with `hidden: 1`, `status: 0` and only fields recorded in the store repo field map.
 4. `verifier.verify_created(product_id, draft)` (below).
@@ -145,7 +145,7 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
 - name
 - price
 - quantity
-- sku, model
+- sku (only when sent), model
 - `hidden` truthy
 - `status` falsy
 - `image` on the iStores CDN host

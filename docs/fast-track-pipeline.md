@@ -65,6 +65,7 @@ The list lives in the store repo's playbook, not in code. Proposed content:
 ## Known gaps of the fast track (stated to the owner in the preview)
 - **Category is not set.** The write shape of the category field was never observed (CLAUDE.md rule 6). The owner sets it in the store's admin until it is observed and added.
 - **Only the main image is saved.** Extra images depend on P1-02 (observe the `images` write shape). Until then no lifestyle image is generated, so no money is spent on an image that cannot be saved.
+- **No SKU (DEV, 15.11.2026).** The owner's email does not carry the supplier item code, so no SKU is sent (iStores fills its own value) and the duplicate check uses the model only. The extraction prompt v3 adds the item code as an optional field; when the owner writes it, it is sent as the SKU.
 - **No web research.** The description uses only what the owner wrote and what the photo shows on a printed label is not read.
 - **Images: two options, always (DEV, 14.11.2026).**
   - Two options always exist: image 1 (the owner's photo after postprocess: square, white padding, no model, no cost) and image 2 (generated). The owner can reply "תמונה 1" or "תמונה 2".
