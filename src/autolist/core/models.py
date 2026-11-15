@@ -382,6 +382,8 @@ class JobVersion(_Strict):
     title: str
     description_html: str
     image_choice: Literal[1, 2]
+    image_options: list[Literal[1, 2]] = Field(default_factory=list)  # attached to the preview
+    preview_gmail_id: str | None = None  # the sent preview; image 2 is read back from it (#36)
     preview_rfc_message_id: str | None  # Message-ID of the preview email, set once sent
 
 

@@ -69,7 +69,7 @@ The list lives in the store repo's playbook, not in code. Proposed content:
 - **Images: two options, always (DEV, 14.11.2026).**
   - Two options always exist: image 1 (the owner's photo after postprocess: square, white padding, no model, no cost) and image 2 (generated). The owner can reply "תמונה 1" or "תמונה 2".
   - **What the preview shows (DEV, 14.11.2026):** without printed text, only image 2, with one line offering "תמונה 1" (his own photo, which he already has). With printed text, both side by side, so the text can be compared.
-  - **Nothing is stored for this.** The original stays only in the owner's email in the agent mailbox; image 1 is processed in memory when needed. An image goes to the bucket only when it is the one being uploaded, and the bucket deletes it after one day.
+  - **Nothing is stored for this.** The original stays only in the owner's email in the agent mailbox; image 1 is processed in memory when needed. Image 2 waits in the preview email in the agent mailbox (attached as `image-2.jpg`) and is read back from there at approval (decision #36, DEV 15.11.2026). An image goes to the bucket only when it is the one being uploaded, and the bucket deletes it after one day.
   - **Which one is preselected** comes from one extra field in the existing extraction call (Haiku, it already runs on every email): `printed_text` per product, true when the photo shows printed text or a label on the product or its packaging. There is no separate check per image.
   - The writing prompts never see the image, so the description cannot take facts from it.
   - `printed_text` true → image 1 is preselected, and the preview states, in plain words:
