@@ -340,6 +340,7 @@ class ProductDraft(_Strict):
     sku: str | None = Field(min_length=1)  # supplier item code; None = not sent (decision 15.11)
     model: str = Field(min_length=1)
     upc: str | None
+    stock_managed: bool  # iStores `subtract`: the store limits orders to the stock (playbook)
     main_image: ImageRef
     extra_images: list[ImageRef]
 

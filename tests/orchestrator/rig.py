@@ -41,6 +41,7 @@ SECTIONS: list[dict[str, Any]] = [
 ]
 PLAYBOOK: dict[str, Any] = {
     "listing": {"required": ["name", "price", "quantity", "model", "photo"]},
+    "stock": {"subtract": True},
     "title": {"pattern": "x"},
     "description": {"sections": SECTIONS},
 }
