@@ -125,3 +125,6 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 - Refuses with `AttachmentRejected` unless exactly one part has that exact file name, it is `image/jpeg`, its size is within `max_bytes` before and after download, and the bytes start with the JPEG marker.
 - Read-only. The caller passes only the `preview_gmail_id` recorded on the job version being published.
 - Tests: `tests/channels/test_own_attachment.py`.
+
+## Amendment (2026-11-15, DEV): phone "sent from" lines
+`strip_quoted` also cuts a phone mail app's default line ("Sent from my iPhone", "נשלח מה-iPhone שלי", "Get Outlook for Android" and the other exact forms in `reader._DEVICE_LINES`). Only the last non-empty line is cut, only on a full match, so content that merely starts like one ("נשלח מהמחסן מחר") is kept. Without it, "מאשר" from a phone would not count as a command (safe, but the owner would be asked again).

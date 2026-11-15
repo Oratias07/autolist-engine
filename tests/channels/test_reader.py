@@ -140,3 +140,34 @@ def test_no_reply_headers(email_cfg: EmailChannelConfig) -> None:
     msg = _message([_text("x")], email_cfg.allowed_senders[0])
     out = fetch_message(FakeGmail({"get": [msg]}), "m1", config=email_cfg, max_bytes=100)
     assert (out.rfc_message_id, out.in_reply_to) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "tail",
+    [
+        "Sent from my iPhone",
+        "נשלח מה-iPhone שלי",
+        "‏נשלח מה‑iPhone שלי",
+        "נשלח מ-Samsung Galaxy",
+        "Get Outlook for Android",
+        "sent from my android device.",
+    ],
+)
+def test_phone_signature_line_is_cut(tail: str) -> None:
+    from autolist.agent_runtime.commands import parse_command
+
+    text = strip_quoted(f"מאשר\n\n{tail}\n")
+    assert text == "מאשר"
+    assert parse_command(text, {"approve": "מאשר"}) == "approve"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "מאשר\nנשלח מהמחסן מחר",  # real content that only starts like a signature
+        "מאשר\nSent from my office, price 480",
+        "Sent from my iPhone\nמאשר אבל המחיר 480",  # not the last line: kept
+    ],
+)
+def test_content_that_looks_like_a_signature_is_kept(text: str) -> None:
+    assert strip_quoted(text) == text
