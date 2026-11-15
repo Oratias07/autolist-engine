@@ -428,6 +428,8 @@ class Job(_Strict):
     number: int = Field(gt=0)
     state: JobState
     source_gmail_id: str  # the owner's email that opened the job
+    more_source_gmail_ids: list[str] = Field(default_factory=list)  # his answers in a
+    # clarification thread, in order; their attachments follow the first email's
     source_thread_id: str
     source_subject: str | None = None  # the owner email's subject; replies there are "Re: ..."
     source_rfc_message_id: str | None = None  # its Message-ID, for In-Reply-To

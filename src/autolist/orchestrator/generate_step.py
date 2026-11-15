@@ -30,9 +30,14 @@ MAX_REFERENCES = 4  # ImageRequest limit
 
 
 def job_photos(rt: Runtime, job: Job) -> list[ReferenceImage]:
-    """The job's photos, re-read from the owner's email and guarded again (nothing is stored)."""
-    msg = read(rt, job.source_gmail_id)
-    accepted = guard(msg.attachments, rt.config.intake).accepted
+    """The job's photos, re-read from the owner's email(s) and guarded again (nothing is stored).
+
+    In a clarification thread the attachments of every owner message count, in order, as the
+    extraction saw them (``intake_step.with_thread_context``)."""
+    attachments = []
+    for gmail_id in [job.source_gmail_id, *job.more_source_gmail_ids]:
+        attachments += read(rt, gmail_id).attachments
+    accepted = guard(attachments, rt.config.intake).accepted
     photos = [accepted[i - 1] for i in job.photo_indexes if 0 < i <= len(accepted)]
     if not photos or len(photos) != len(job.photo_indexes):
         raise RuntimeError(f"{job.job_id}: the job's photos are no longer in the source email")
