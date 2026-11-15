@@ -260,3 +260,15 @@ async def test_empty_token_refused_and_context_manager() -> None:
         make_config(), TOKEN, InMemoryRegistry(), transport=httpx.MockTransport(lambda r: OK)
     ) as client:
         assert await client.get_product(1) == {"success": True}
+
+
+async def test_put_with_images_is_refused_before_any_request() -> None:
+    """P1-02 (15.11.2026): `images` in a PUT replaced the main image on the live store."""
+    from autolist.publish.errors import UnobservedField
+
+    client, rec, reg, _ = make_client(lambda r: httpx.Response(200, content=b""))
+    _own(reg, 971)
+    with pytest.raises(UnobservedField, match="images"):
+        await client.update_product(971, {"images": [{"image": "https://x.example/a.jpg"}]})
+    assert rec.calls == []
+    await client.aclose()

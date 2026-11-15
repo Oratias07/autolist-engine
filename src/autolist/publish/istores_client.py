@@ -23,6 +23,7 @@ from autolist.publish.errors import (
     ForeignProductError,
     StoreAPIError,
     UnhideDisabled,
+    UnobservedField,
     UnsafeCreate,
     UnsafeUnhide,
 )
@@ -229,6 +230,10 @@ class IStoresClient:
     async def update_product(self, product_id: int, body: Mapping[str, Any]) -> Any:
         """PUT on a product this system created. Unhiding passes both gates first."""
         check_allowed("PUT", f"/products/{int(product_id)}")
+        if "images" in body:
+            # observed in P1-02 (15.11.2026): `images` in a PUT replaced the main image instead
+            # of adding one, against the vendor docs. Extra images go only in the create body.
+            raise UnobservedField("`images` is never sent in a PUT (it replaced the main image)")
         self._require_own(product_id)
         if is_unhide(body):
             await self._check_unhide(product_id)
