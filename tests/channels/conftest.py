@@ -63,5 +63,16 @@ class FakeGmail:
     def get(self, **kw: Any) -> Call:
         return self._call("get", **kw)
 
+    def attachments(self) -> _Attachments:
+        return _Attachments(self)
+
     def getProfile(self, **kw: Any) -> Call:
         return self._call("getProfile", **kw)
+
+
+class _Attachments:
+    def __init__(self, gmail: FakeGmail) -> None:
+        self._gmail = gmail
+
+    def get(self, **kw: Any) -> Call:
+        return self._gmail._call("attachments.get", **kw)
