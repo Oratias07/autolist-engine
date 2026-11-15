@@ -17,6 +17,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from autolist.channels.errors import TemplateMissing, TemplateVariableError
 from autolist.core.config import store_dir
+from autolist.core.text_status import refusal
 
 _FRONT = re.compile(r"\A---\s*\n(?P<meta>.*?)\n---\s*\n(?P<body>.*)\Z", re.DOTALL)
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -51,8 +52,8 @@ def _read(name: str, folder: Path | None) -> tuple[dict[str, object], str]:
     meta = yaml.safe_load(match["meta"]) or {}
     if not isinstance(meta, dict):
         raise TemplateMissing(f"reply template {name}: front matter is not a mapping")
-    if meta.get("status") == "not-written":
-        raise TemplateMissing(f"reply template {name}: status is not-written")
+    if (reason := refusal(meta.get("status"))) is not None:
+        raise TemplateMissing(f"reply template {name}: {reason}")
     body = _COMMENT.sub("", match["body"]).strip()
     if not body:
         raise TemplateMissing(f"reply template {name}: empty body")

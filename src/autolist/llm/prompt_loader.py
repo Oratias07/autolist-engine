@@ -17,6 +17,7 @@ from jinja2 import StrictUndefined, TemplateError
 from jinja2.sandbox import SandboxedEnvironment
 
 from autolist.core.config import store_dir
+from autolist.core.text_status import refusal
 from autolist.llm.errors import PromptMissing, PromptVariableError
 
 _FRONT_MATTER = re.compile(r"\A---\s*\n(?P<meta>.*?)\n---\s*\n(?P<body>.*)\Z", re.DOTALL)
@@ -48,8 +49,8 @@ def parse_prompt(name: str, raw: str) -> Prompt:
     meta = yaml.safe_load(match["meta"]) or {}
     if not isinstance(meta, dict):
         raise PromptMissing(f"prompt {name}: front matter is not a mapping")
-    if meta.get("status") == "not-written":
-        raise PromptMissing(f"prompt {name}: status is not-written")
+    if (reason := refusal(meta.get("status"))) is not None:
+        raise PromptMissing(f"prompt {name}: {reason}")
     body = match["body"]
     if not _HTML_COMMENT.sub("", body).strip():
         raise PromptMissing(f"prompt {name}: empty body")

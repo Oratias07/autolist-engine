@@ -24,6 +24,7 @@ from tests.core.conftest import VALID_STORE
 
 MODEL = "model-under-test"
 PROMPT = """---
+status: approved
 name: extract_request
 version: 1
 variables: [email_text]

@@ -266,3 +266,54 @@ def test_original_subject_drops_reply_prefixes() -> None:
     assert original_subject("Re: RE: Fwd: [T-1] כיסא") == "[T-1] כיסא"
     assert original_subject("מוצר חדש") == "מוצר חדש"
     assert original_subject(None) == ""
+
+
+def _spend(rig: Rig, usd: str) -> None:
+    from decimal import Decimal
+
+    from autolist.core.models import CostEntry
+
+    rig.ledger.record(
+        CostEntry(
+            at=rig.clock.now,
+            job_id=None,
+            provider="anthropic",
+            category="llm",
+            operation="extract",
+            units=1,
+            unit="tokens",
+            usd=Decimal(usd),
+            estimated=False,
+        )
+    )
+
+
+async def test_threshold_crossed_in_a_step_sends_one_cost_alert() -> None:
+    rig = _rig(extraction([item()]))
+    _spend(rig, "30.50")
+    await _email(rig)
+    alerts = [m for m in rig.mail.sent if m.template == "cost_alert"]
+    assert len(alerts) == 1 and alerts[0].to == "owner@example.com"
+    await _generate(rig)
+    assert sum(1 for m in rig.mail.sent if m.template == "cost_alert") == 1  # not again
+
+
+async def test_cap_reached_sends_budget_email_even_when_the_step_fails() -> None:
+    rig = _rig(extraction([item()]))
+    await _email(rig)
+    _spend(rig, "60")
+    rig.llm.error = CostCapExceeded("monthly cap", monthly=True)
+    with pytest.raises(CostCapExceeded):
+        await _generate(rig)
+    templates = rig.mail.templates()
+    assert "failed_budget" in templates and templates.count("budget_cap_reached") == 1
+
+
+async def test_cost_alert_send_failure_does_not_fail_the_step() -> None:
+    rig = _rig(extraction([item()]))
+    _spend(rig, "30.50")
+    rig.mail.fail_on = "cost_alert"
+    assert await _email(rig) == {"opened": ["T-1"]}
+    rig.mail.fail_on = None
+    await _generate(rig)  # the alert was put back and goes out after the next step
+    assert sum(1 for m in rig.mail.sent if m.template == "cost_alert") == 1

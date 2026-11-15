@@ -1,4 +1,5 @@
 ---
+status: approved
 name: system_json_output
 version: 1
 variables: [schema]

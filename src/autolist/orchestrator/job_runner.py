@@ -17,8 +17,9 @@ from typing import Any
 
 from autolist.core.errors import CostCapExceeded
 from autolist.core.logging import get_logger
-from autolist.core.models import JobState
+from autolist.core.models import JobState, OutboundMessage
 from autolist.core.state_machine import FINAL
+from autolist.orchestrator.cost_alerts import deliver_cost_alerts
 from autolist.orchestrator.generate_step import generate
 from autolist.orchestrator.intake_step import handle_new_email, read
 from autolist.orchestrator.publish_step import publish
@@ -33,7 +34,40 @@ def _monthly_cap(exc: Exception) -> bool:
     return isinstance(exc, CostCapExceeded) and exc.monthly
 
 
+class _MailSender:
+    def __init__(self, rt: Runtime) -> None:
+        self._rt = rt
+
+    def send(self, msg: OutboundMessage) -> str:
+        return self._rt.mail.deliver(msg).gmail_id
+
+
+class _OpenJobs:
+    def __init__(self, rt: Runtime) -> None:
+        self._rt = rt
+
+    def count(self) -> int:
+        return len(self._rt.jobs.open_jobs())
+
+
+def send_cost_alerts(rt: Runtime) -> list[str]:
+    """After every step: at most one owner email for thresholds or the cap crossed by it."""
+    try:
+        return deliver_cost_alerts(rt.ledger, _MailSender(rt), rt.owner, _OpenJobs(rt), rt.now())
+    except Exception:
+        # the ledger put the events back; they go out after the next step
+        log.exception("cost alert not sent")
+        return []
+
+
 async def run_task(rt: Runtime, payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return await _run(rt, payload)
+    finally:
+        send_cost_alerts(rt)
+
+
+async def _run(rt: Runtime, payload: dict[str, Any]) -> dict[str, Any]:
     event = payload.get("event")
     if event == "email_received":
         msg = read(rt, str(payload["gmail_id"]))
