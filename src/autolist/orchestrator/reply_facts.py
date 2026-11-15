@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from autolist.content.writer import write_listing, writer_facts
+from autolist.core.facts import present_keys
 from autolist.core.models import ChannelMessage, Job, JobState, ReplyClassification
 from autolist.core.playbook import require
 from autolist.core.state_machine import transition
@@ -29,7 +30,7 @@ from autolist.orchestrator.runtime import (
 def missing_required(rt: Runtime, job: Job) -> list[str]:
     """Required fields the job still lacks (``photo`` counts when it has photo indexes)."""
     required: list[str] = require(rt.playbook, "listing.required")
-    have = {f.key for f in job.facts} | ({"photo"} if job.photo_indexes else set())
+    have = present_keys({f.key for f in job.facts}, bool(job.photo_indexes))
     return [k for k in required if k not in have]
 
 

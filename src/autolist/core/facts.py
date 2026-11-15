@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal, Protocol
 
-from autolist.core.models import ChannelMessage, JobFact
+from autolist.core.models import ChannelMessage, Job, JobFact
 
 MAX_DETAILS = 12  # an owner email states a handful; more is not read
 DETAIL = "detail"
@@ -42,3 +42,23 @@ def owner_details(
             )
         )
     return out
+
+
+MODEL_OR_ITEM_CODE = "model_or_item_code"  # playbook required key: one of the two is enough
+
+
+def present_keys(fact_keys: set[str], has_photo: bool) -> set[str]:
+    """The keys a job has, for the playbook's required list (DEV 15.11.2026: a model or an
+    item code is enough)."""
+    keys = set(fact_keys)
+    if has_photo:
+        keys.add("photo")
+    if keys & {"model", "item_code"}:
+        keys.add(MODEL_OR_ITEM_CODE)
+    return keys
+
+
+def store_model(job: Job) -> str | None:
+    """What goes in the store's model field: the model, else the item code (DEV 15.11.2026)."""
+    fact = job.fact("model") or job.fact("item_code")
+    return fact.value if fact else None
