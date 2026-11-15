@@ -43,3 +43,16 @@ def test_non_mapping_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         load_playbook()
     with pytest.raises(ConfigMissing):
         load_glossary()
+
+
+def test_field_labels(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from autolist.core.playbook import load_field_labels
+
+    store = _store(tmp_path, "")
+    (store / "agent").mkdir()
+    (store / "agent" / "field_labels.yaml").write_text("labels:\n  price: מחיר\n", encoding="utf-8")
+    monkeypatch.setenv("AUTOLIST_STORE_DIR", str(store))
+    assert load_field_labels() == {"price": "מחיר"}
+    (store / "agent" / "field_labels.yaml").write_text("labels:\n  price: 1\n")
+    with pytest.raises(ConfigMissing):
+        load_field_labels()

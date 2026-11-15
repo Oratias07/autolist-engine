@@ -485,6 +485,19 @@ class SentMessage(_Strict):
     rfc_message_id: str  # read back from the sent message; owner replies quote it
 
 
+class Preview(_Strict):
+    """A preview email ready to send, before the image note fragment is inserted.
+
+    The orchestrator renders ``image_note_template`` (a reply fragment in the store repo) into
+    ``message.variables["image_note"]``; review cannot import channels.
+    """
+
+    message: OutboundMessage
+    image_note_template: str
+    image_choice: Literal[1, 2]
+    image_options: list[Literal[1, 2]]  # the images attached, in order
+
+
 class HealthStatus(_Strict):
     ok: bool
     checked_at: datetime
