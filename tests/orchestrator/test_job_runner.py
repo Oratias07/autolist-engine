@@ -258,3 +258,11 @@ async def test_developer_alert_and_job_error_are_redacted() -> None:
     alert = rig.mail.sent[-1]
     assert alert.template == "developer_alert" and marker not in alert.variables["detail"]
     assert marker not in (rig.jobs.get("T-1").error or "")  # type: ignore[union-attr]
+
+
+def test_original_subject_drops_reply_prefixes() -> None:
+    from autolist.orchestrator.runtime import original_subject
+
+    assert original_subject("Re: RE: Fwd: [T-1] כיסא") == "[T-1] כיסא"
+    assert original_subject("מוצר חדש") == "מוצר חדש"
+    assert original_subject(None) == ""

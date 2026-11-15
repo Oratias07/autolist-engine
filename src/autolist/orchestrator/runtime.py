@@ -6,6 +6,7 @@ from the store repo's reply templates; this file has none.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -61,6 +62,14 @@ class Runtime:
 
     def none_label(self) -> str:
         return self.labels["_none"]
+
+
+_REPLY_PREFIX = re.compile(r"^\s*((re|fw|fwd)\s*:\s*)+", re.IGNORECASE)
+
+
+def original_subject(subject: str | None) -> str:
+    """The subject without "Re:"/"Fwd:" prefixes: reply templates add their own "Re: "."""
+    return _REPLY_PREFIX.sub("", subject or "").strip()
 
 
 def product_name(job: Job) -> str:

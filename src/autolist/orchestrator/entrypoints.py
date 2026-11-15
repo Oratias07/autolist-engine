@@ -8,12 +8,14 @@ watchdog. A step error is logged and answered with 500; Cloud Tasks does not ret
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -46,7 +48,7 @@ def create_app(deps: Deps) -> Starlette:
     email = deps.config.channels.email
 
     async def healthz(_: Request) -> JSONResponse:
-        report = deps.health()
+        report = await run_in_threadpool(deps.health)
         return JSONResponse(report, status_code=200 if report.get("ok") else 503)
 
     async def gmail_push(request: Request) -> JSONResponse:
@@ -57,7 +59,11 @@ def create_app(deps: Deps) -> Starlette:
             envelope = None
         if not isinstance(envelope, dict) or "message" not in envelope:
             return JSONResponse({"error": "not a pub/sub push"}, status_code=400)
-        accepted = poll_accepted(deps.gmail(), email, deps.state, deps.processed, deps.now())
+        # blocking Gmail and Firestore calls run off the event loop, so a long job step in
+        # another request never delays the push acknowledgement
+        accepted = await run_in_threadpool(
+            poll_accepted, deps.gmail(), email, deps.state, deps.processed, deps.now()
+        )
         for msg in accepted:
             task = deps.queue.enqueue(
                 JOB_TASK_PATH,
@@ -86,14 +92,15 @@ def create_app(deps: Deps) -> Starlette:
         if not isinstance(payload, dict) or not isinstance(payload.get("event"), str):
             return JSONResponse({"error": "not a job task"}, status_code=400)
         try:
-            result = await run_task(deps.runtime(), payload)
+            # a job step makes blocking calls for minutes: its own thread and event loop
+            result = await run_in_threadpool(lambda: asyncio.run(run_task(deps.runtime(), payload)))
         except Exception:
             log.exception("job task failed", extra={"event": payload.get("event")})
             return JSONResponse({"error": "step failed"}, status_code=500)
         return JSONResponse(result)
 
     async def cron_watchdog(_: Request) -> JSONResponse:
-        return JSONResponse(run_watchdog(deps.runtime()))
+        return JSONResponse(await run_in_threadpool(run_watchdog, deps.runtime()))
 
     return Starlette(
         routes=[

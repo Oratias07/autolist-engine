@@ -108,3 +108,20 @@ Designed to stay inside the Always Free quotas at the expected volume (tens of p
 8. A job step forced past the limit ends as failed, the owner gets the failure reply, and no task is retried.
 9. The watchdog fails a job left in an active state and sends both messages.
 7. Firestore-backed registry and ledger pass the same unit tests as the in-memory ones.
+
+
+## Service image, deploy and part 2 (P1-03, 15.11.2026)
+- **Image:** `Dockerfile` at the engine root. Python 3.12 slim, `uv sync --frozen --no-dev`, runs as a non-root user, `uvicorn autolist.orchestrator.main:app`. The build context has `engine/` and `store/`. `store/` holds only `store.yaml`, `playbook/`, `agent/` and `docs/voice.md`: no fixtures, no live runs. Engine CI builds the image with an empty store and checks that the app module imports.
+- **`orchestrator/main.py`:** wiring only. Clients and secrets are built on first use, so a missing secret fails the request that needs it and shows in `/healthz`. The app does not crash at start. The only environment value is `AUTOLIST_SERVICE_URL`, set by the deploy workflow after the first deploy. `gcp.tasks_queue` and `gcp.invoker_service_account` are new `store.yaml` keys.
+- **Blocking work off the event loop:** a job step runs in its own thread and event loop. The Gmail push, health and watchdog handlers run in the thread pool. A long step never delays a push acknowledgement.
+- **Deploy (store repo `.github/workflows/deploy.yml`):**
+  - Runs manually, from `main` only, with a full engine commit sha.
+  - Stage gate: `prod` refuses while any secret is labelled `stage=dev`.
+  - Builds and pushes the image, then `gcloud run deploy autolist-<stage>`. The service is not public, runs 0–1 instances with concurrency 8, 1 CPU and 1 GiB. The request timeout is `agent.job_step_timeout_s` + 60 s.
+  - Checks that a call without a token gets 403. Once part 2 has granted the CI account `run.invoker`, it also checks `/healthz` with an ID token.
+- **Part 2 (`infra/setup-part2.sh`, DEV in Cloud Shell after the first deploy):**
+  - `run.invoker` for `autolist-invoke` and `autolist-ci`.
+  - The Pub/Sub service agent may sign the push with the invoker's token.
+  - Push subscription `<service>-push`: OIDC, 10-minute retention, no dead letter.
+  - Two daily Scheduler jobs, with no retries: `renew-watch` at 06:17 and `watchdog` at 06:43, in the store's time zone.
+  - One immediate `renew-watch` run, so the mailbox is watched from that moment.
