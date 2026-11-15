@@ -19,6 +19,7 @@ dependencies = [
   "starlette>=1.10.0",
   "uvicorn>=0.54.0",
   "google-cloud-tasks>=2.26.0",
+  "pillow-heif>=1.8.1",
 ]
 
 [dependency-groups]

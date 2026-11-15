@@ -153,7 +153,9 @@ class AgentConfig(_Strict):
 class IntakeConfig(_Strict):
     """Limits on what an owner email may carry (attachment guard)."""
 
-    image_types: list[Literal["image/jpeg", "image/png", "image/webp"]] = Field(min_length=1)
+    image_types: list[
+        Literal["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]
+    ] = Field(min_length=1)
     max_attachments: int = Field(gt=0)
     max_attachment_bytes: int = Field(gt=0)
     max_image_pixels: int = Field(gt=0)  # refuses decompression bombs before decoding

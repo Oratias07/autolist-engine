@@ -41,6 +41,7 @@ Turns a `ChannelMessage` from the owner into products with quoted facts. It also
   - Missing required details come from the playbook list, not from the model.
 - **Attachments are checked by decoding, not by the declared MIME type:**
   - type, size and count limits come from `store.yaml`;
+  - HEIC/HEIF photos (iPhone camera) are read through `pillow-heif` and re-encoded to JPEG like any other photo (DEV, 15.11.2026);
   - the pixel count is checked from the header before decoding (decompression bombs);
   - accepted photos are re-encoded, which strips EXIF and anything appended to the file, and downscaled to `intake.llm_image_max_edge_px`.
 - **File names** are reduced to a display-only form: no path, no markup characters, at most 80 characters.
