@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from autolist.core.models import Job, JobState
 from autolist.core.state_machine import transition
-from autolist.orchestrator.runtime import Runtime, product_name, send, to_owner
+from autolist.orchestrator.runtime import Runtime, original_subject, product_name, send, to_owner
 from autolist.publish.publisher import find_duplicate
 
 
@@ -29,7 +29,7 @@ async def cancel_if_duplicate(rt: Runtime, job: Job) -> Job | None:
         to_owner(
             "duplicate_found",
             {
-                "original_subject": job.source_subject or "",
+                "original_subject": original_subject(job.source_subject),
                 "product_name": product_name(job),
                 "match_field": rt.labels[field],
                 "match_value": value,

@@ -19,7 +19,13 @@ VALID_STORE: dict[str, Any] = {
         "stock_statuses": None,
         "catalog_page_size": None,
     },
-    "gcp": {"project_id": "example-project", "region": None, "reference_bucket": None},
+    "gcp": {
+        "project_id": "example-project",
+        "region": None,
+        "reference_bucket": None,
+        "tasks_queue": None,
+        "invoker_service_account": None,
+    },
     "secrets": {
         "istores_token": "istores-token",
         "anthropic_api_key": "anthropic-api-key",

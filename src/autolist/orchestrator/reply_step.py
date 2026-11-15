@@ -22,6 +22,7 @@ from autolist.orchestrator.runtime import (
     JOB_TASK_PATH,
     Runtime,
     alert_developer,
+    original_subject,
     product_name,
     send,
     to_owner,
@@ -55,7 +56,10 @@ def _status(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
         rt,
         to_owner(
             "status_reply",
-            {"original_subject": msg.subject or "", "status_lines": status_line(rt, job)},
+            {
+                "original_subject": original_subject(msg.subject),
+                "status_lines": status_line(rt, job),
+            },
             to=rt.owner,
             thread_id=job.thread_id,
             in_reply_to=msg.rfc_message_id,
@@ -136,7 +140,7 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
             rt,
             to_owner(
                 "out_of_scope",
-                {"original_subject": msg.subject or ""},
+                {"original_subject": original_subject(msg.subject)},
                 to=rt.owner,
                 thread_id=job.thread_id,
                 in_reply_to=msg.rfc_message_id,

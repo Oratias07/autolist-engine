@@ -45,6 +45,8 @@ class GcpConfig(_Strict):
     project_id: str
     region: str | None
     reference_bucket: str | None
+    tasks_queue: str | None  # Cloud Tasks queue of job steps (infra setup part 1)
+    invoker_service_account: str | None  # the only identity allowed to call the service
 
 
 class SecretsConfig(_Strict):

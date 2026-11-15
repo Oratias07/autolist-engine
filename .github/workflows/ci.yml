@@ -29,3 +29,13 @@ jobs:
           echo "${GL_SHA256}  gl.tgz" | sha256sum -c -
           tar xzf gl.tgz gitleaks
           ./gitleaks detect --redact --no-banner --config .gitleaks.toml
+  image:
+    # builds the service image with an empty store (no client data in this repo) and checks
+    # that the app module imports; the real store is added only by the store repo's deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: engine }
+      - run: mkdir -p store
+      - run: docker build -f engine/Dockerfile -t autolist-ci .
+      - run: docker run --rm --entrypoint python autolist-ci -c "import autolist.orchestrator.main, autolist.orchestrator.entrypoints; print('import ok')"
