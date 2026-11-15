@@ -2,7 +2,15 @@ import pytest
 
 from autolist.agent_runtime.commands import mentions, parse_command
 
-WORDS = {"approve": "מאשר", "cancel": "בטל", "image_1": "תמונה 1", "image_2": "תמונה 2"}
+WORDS = {
+    "approve": "מאשר",
+    "cancel": "בטל",
+    "image_1": "תמונה 1",
+    "image_2": "תמונה 2",
+    "lifestyle_add": "תמונת אווירה",
+    "lifestyle_remove": "בלי תמונת אווירה",
+    "no_sale": "בלי מבצע",
+}
 
 
 @pytest.mark.parametrize(
@@ -21,6 +29,12 @@ WORDS = {"approve": "מאשר", "cancel": "בטל", "image_1": "תמונה 1", "
         ("מאשר\n\nנשלח מה-iPhone שלי", None),
         ("", None),
         ("תמונה 3", None),
+        ("תמונת אווירה", "lifestyle_add"),
+        ("תמונת אווירה.", "lifestyle_add"),
+        ("בלי תמונת אווירה", "lifestyle_remove"),
+        ("בלי מבצע", "no_sale"),
+        ("תעשה גם תמונת אווירה", None),  # free text: the classifier, never a command
+        ("בלי מבצע ומאשר", None),
     ],
 )
 def test_parse_command(text: str, command: str | None) -> None:

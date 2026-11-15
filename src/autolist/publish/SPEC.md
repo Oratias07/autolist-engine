@@ -179,3 +179,7 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
 - `product_category: [ids]` and `product_special: [{price, date_start, date_end}]` are saved both on create and on PUT. They read back as `category` (an object keyed by category id) and `special` (a list; `price` as a string; the store adds its default `customer_group_id` and `priority: 0`).
 - `images: [{image, sort_order}]` is saved as an extra image **only in the create body**. In a PUT it replaced the main image instead, against the vendor docs. `IStoresClient.update_product` refuses a body with `images` (`UnobservedField`).
 - Field map and tests updated in the same change (CLAUDE.md rule 6).
+
+## Amendment (2026-11-15, DEV): extra image and sale on create
+- `ProductDraft.extra_images` (the lifestyle image) are sent as `images: [{image, sort_order}]`, and `ProductDraft.special` as `product_special: [{price, date_start, date_end}]`. These are the shapes observed in P1-02, sent on create only. The same image twice is refused before any call.
+- The verifier checks that each extra image came back on the store CDN, and that a `special` entry has the same price and dates.

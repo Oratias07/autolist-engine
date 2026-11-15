@@ -56,6 +56,9 @@ def _build(job: Job, image_2: bytes | None = b"two", choice: Literal[1, 2] | Non
         to="owner@example.com",
         in_reply_to=None,
         category="cat",
+        sale="-",
+        lifestyle=None,
+        lifestyle_note="-",
     )
 
 
@@ -122,6 +125,9 @@ def test_text_with_problems_refused() -> None:
             to="o@example.com",
             in_reply_to=None,
             category="cat",
+            sale="-",
+            lifestyle=None,
+            lifestyle_note="-",
         )
 
 
@@ -144,6 +150,9 @@ def test_variables_use_latest_facts_and_list_missing_optionals() -> None:
         to="owner@example.com",
         in_reply_to="<m1@example.com>",
         category="cat",
+        sale="-",
+        lifestyle=None,
+        lifestyle_note="-",
     )
     v = p.message.variables
     assert v["price"] == "450"
@@ -156,3 +165,33 @@ def test_variables_use_latest_facts_and_list_missing_optionals() -> None:
 def test_nothing_missing_uses_none_label() -> None:
     job = _job(facts=[*_job().facts, _f("barcode", "729"), _f("keywords", "כיסא")])
     assert _build(job).message.variables["optional_missing"] == "אין"
+
+
+def test_lifestyle_is_attached_as_image_3_with_its_note_and_the_sale_line() -> None:
+    preview = build_preview(
+        _job(),
+        version=1,
+        text=_text(),
+        image_1=b"one",
+        image_2=b"two",
+        owner_choice=None,
+        labels=LABELS,
+        to="owner@example.com",
+        in_reply_to=None,
+        category="cat",
+        sale="sale-line",
+        lifestyle=b"life",
+        lifestyle_note="life-note",
+    )
+    names = [a.filename for a in preview.message.attachments]
+    assert names == ["image-2.jpg", "image-3.jpg"]
+    assert preview.message.attachments[-1].data == b"life"
+    assert preview.lifestyle
+    v = preview.message.variables
+    assert (v["sale"], v["lifestyle_note"]) == ("sale-line", "life-note")
+
+
+def test_no_lifestyle_attaches_no_image_3() -> None:
+    preview = _build(_job())
+    assert "image-3.jpg" not in [a.filename for a in preview.message.attachments]
+    assert not preview.lifestyle

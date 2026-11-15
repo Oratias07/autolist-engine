@@ -43,6 +43,7 @@ SECTIONS: list[dict[str, Any]] = [
 PLAYBOOK: dict[str, Any] = {
     "listing": {"required": ["name", "price", "quantity", "model_or_item_code", "photo"]},
     "stock": {"subtract": True},
+    "images": {"lifestyle_people": False, "added_text_or_logo": "forbidden"},
     "categories": {"never_auto": [9], "max_per_product": 2},
     "title": {"pattern": "x"},
     "description": {"sections": SECTIONS},
@@ -51,6 +52,7 @@ LABELS = {
     "name": "שם המוצר",
     "price": "מחיר",
     "sale_price": "מחיר מבצע",
+    "sale_end": "sale-end-label",
     "quantity": "כמות במלאי",
     "model": "דגם",
     "barcode": "ברקוד",
@@ -81,7 +83,15 @@ CATEGORIES = [
     {"category_id": 9, "name": "מבצעים", "status": 1, "hidden": 0},
     {"category_id": 13, "name": "כבויה", "status": 0, "hidden": 0},
 ]
-COMMANDS = {"approve": "מאשר", "cancel": "בטל", "image_1": "תמונה 1", "image_2": "תמונה 2"}
+COMMANDS = {
+    "approve": "מאשר",
+    "cancel": "בטל",
+    "image_1": "תמונה 1",
+    "image_2": "תמונה 2",
+    "lifestyle_add": "תמונת אווירה",
+    "lifestyle_remove": "בלי תמונת אווירה",
+    "no_sale": "בלי מבצע",
+}
 
 
 def png(color: str = "red", size: tuple[int, int] = (40, 30)) -> bytes:
@@ -151,7 +161,9 @@ def item(**over: Any) -> dict[str, Any]:
         "keywords": q(),
         "category_hint": q(),
         "item_code": q(),
+        "sale_end": q(),
         "details": [],
+        "lifestyle_requested": False,
         "photo_indexes": [1],
         "printed_text": False,
     }
@@ -173,14 +185,23 @@ def extraction(items: list[dict[str, Any]], **over: Any) -> dict[str, Any]:
     return base
 
 
-def classified(intent: str, question: str = "", also: bool = False, **facts: Any) -> dict[str, Any]:
+def classified(
+    intent: str, question: str = "", also: bool = False, lifestyle: bool = False, **facts: Any
+) -> dict[str, Any]:
     base = {k: q() for k in ("name", "price", "sale_price", "quantity", "model", "barcode")}
     base["keywords"] = q()
     base["item_code"] = q()
     base["category_hint"] = q()
+    base["sale_end"] = q()
     base["details"] = []
     base.update(facts)
-    return {"intent": intent, "facts": base, "also_wording_or_image": also, "question": question}
+    return {
+        "intent": intent,
+        "facts": base,
+        "also_wording_or_image": also,
+        "question": question,
+        "lifestyle_requested": lifestyle,
+    }
 
 
 TITLE = TitleOut(title="כיסא משרדי C1", fact_ids=["F1", "F2"], open_points=[])
@@ -339,7 +360,7 @@ class Rig:
             blobs=self.blobs,
             ledger=self.ledger,
             queue=self.queue,
-            fragment=lambda name, _v: f"<{name}>",
+            fragment=lambda name, v: f"<{name}{''.join(f' {k}={v[k]}' for k in sorted(v))}>",
             now=lambda: self.clock.now,
         )
 
@@ -367,6 +388,19 @@ class Rig:
                 "category": {
                     str(i): [{"category_id": i}] for i in self.posted.get("product_category", [])
                 },
+                # read shapes observed in P1-02: images keyed by order on the CDN, special
+                # as a list with the price as a string
+                "images": {
+                    str(i["sort_order"]): {
+                        "image": f"https://cdn.istores.co.il/image/upload/clients/1/x{n}.jpg",
+                        "sort_order": i["sort_order"],
+                    }
+                    for n, i in enumerate(self.posted.get("images", []))
+                },
+                "special": [
+                    {**s, "price": f"{s['price']:.4f}", "customer_group_id": 1, "priority": 0}
+                    for s in self.posted.get("product_special", [])
+                ],
                 **self.store_overrides,
             }
             return httpx.Response(200, json={"product": product})

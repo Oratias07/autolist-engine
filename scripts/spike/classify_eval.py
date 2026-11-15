@@ -36,6 +36,8 @@ def _check(res: ReplyClassification, expect: dict[str, Any]) -> list[str]:
         problems.append(f"intent {res.intent} != {expect['intent']}")
     got = {f.key: f.value for f in res.facts if f.key != "detail"}
     details = [f.value for f in res.facts if f.key == "detail"]
+    if "lifestyle" in expect and res.lifestyle_requested != expect["lifestyle"]:
+        problems.append(f"lifestyle_requested {res.lifestyle_requested}")
     for must in expect.get("details") or []:
         if not any(must in d for d in details):
             problems.append(f"no detail with {must!r} (got {details})")
@@ -62,7 +64,7 @@ def main() -> None:
     cfg = load_store_config()
     samples = store_dir() / "fixtures" / "samples"
     data = yaml.safe_load((samples / "p1-07-classify.yaml").read_text(encoding="utf-8"))
-    for name in ("p1-08-classify-v2.yaml", "p1-09-classify-v3.yaml"):
+    for name in ("p1-08-classify-v2.yaml", "p1-09-classify-v3.yaml", "p1-10-classify-v4.yaml"):
         extra = samples / name
         if extra.exists():
             data["cases"] += yaml.safe_load(extra.read_text(encoding="utf-8"))["cases"]

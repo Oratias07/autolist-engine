@@ -9,8 +9,9 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from autolist.channels.templates import render_fragment
 from autolist.core.blob_store import BlobStore
@@ -18,6 +19,7 @@ from autolist.core.cost_ledger import CostLedger
 from autolist.core.job_store import JobStore
 from autolist.core.logging import redact_text
 from autolist.core.models import Job, OutboundMessage, SentMessage, StoreConfig
+from autolist.core.sale import sale_spec
 from autolist.images.generator import ImageGenerator
 from autolist.llm.client import LLMClient
 from autolist.orchestrator.tasks_queue import TaskQueue
@@ -63,6 +65,10 @@ class Runtime:
     def none_label(self) -> str:
         return self.labels["_none"]
 
+    def today(self) -> date:
+        """Today in the store's timezone (the sale's start day)."""
+        return self.now().astimezone(ZoneInfo(self.config.store.timezone)).date()
+
 
 _REPLY_PREFIX = re.compile(r"^\s*((re|fw|fwd)\s*:\s*)+", re.IGNORECASE)
 
@@ -86,6 +92,32 @@ CATEGORY_NONE = "_category_none"
 def category_text(rt: Runtime, names: list[str]) -> str:
     """The preview's category line: the names, or the "none chosen" fragment."""
     return " · ".join(names) if names else rt.fragment(CATEGORY_NONE, {})
+
+
+SALE_NONE = "_sale_none"
+SALE_VALUE = "_sale_value"
+LIFESTYLE_NONE = "_lifestyle_none"
+LIFESTYLE_ATTACHED = "_lifestyle_attached"
+
+
+def sale_text(rt: Runtime, job: Job) -> str:
+    """The preview's sale line: price and end date (d.m.yyyy), or the "none" fragment."""
+    spec = sale_spec(job, rt.today())
+    if spec is None:
+        return rt.fragment(SALE_NONE, {})
+    sale = job.fact("sale_price")
+    end = spec.date_end
+    return rt.fragment(
+        SALE_VALUE,
+        {
+            "sale_price": sale.value if sale else str(spec.price),
+            "sale_end": f"{end.day}.{end.month}.{end.year}",
+        },
+    )
+
+
+def lifestyle_text(rt: Runtime, attached: bool) -> str:
+    return rt.fragment(LIFESTYLE_ATTACHED if attached else LIFESTYLE_NONE, {})
 
 
 def numbered(lines: list[str]) -> str:

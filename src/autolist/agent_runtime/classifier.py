@@ -38,6 +38,7 @@ class ReplyFacts(_M):
     keywords: Quoted[list[str]]
     item_code: Quoted[str]
     category_hint: Quoted[str]
+    sale_end: Quoted[str]
     details: list[Quoted[str]] = Field(description="other stated product facts, one per item")
 
 
@@ -45,6 +46,7 @@ class ClassifiedReply(_M):
     intent: Literal["facts", "wording_or_image", "status", "other", "unclear"]
     facts: ReplyFacts
     also_wording_or_image: bool
+    lifestyle_requested: bool
     question: str = Field(description="one short question in Hebrew, or an empty string")
 
 
@@ -58,6 +60,7 @@ FIELDS = (
     "keywords",
     "item_code",
     "category_hint",
+    "sale_end",
 )
 
 
@@ -105,7 +108,12 @@ def classify_reply(
         )
     facts += owner_details(parsed.facts.details, message, "reply")
     intent = ReplyIntent(parsed.intent)
-    if intent == ReplyIntent.FACTS and not facts and not unverified:
+    if (
+        intent == ReplyIntent.FACTS
+        and not facts
+        and not unverified
+        and not parsed.lifestyle_requested
+    ):
         intent = ReplyIntent.UNCLEAR  # "facts" with nothing stated: never act on it
     return ReplyClassification(
         intent=intent,
@@ -113,4 +121,5 @@ def classify_reply(
         unverified_fields=unverified,
         also_wording_or_image=parsed.also_wording_or_image,
         question=parsed.question.strip(),
+        lifestyle_requested=parsed.lifestyle_requested,
     )

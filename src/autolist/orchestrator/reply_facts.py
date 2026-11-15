@@ -26,6 +26,7 @@ from autolist.orchestrator.runtime import (
     send,
     to_owner,
 )
+from autolist.orchestrator.sale_step import sale_blocked, sale_not_below, sale_questions
 
 
 def missing_required(rt: Runtime, job: Job) -> list[str]:
@@ -55,15 +56,28 @@ def _ask(rt: Runtime, job: Job, msg: ChannelMessage, questions: list[str]) -> Jo
 
 
 async def apply_facts(
-    rt: Runtime, job: Job, msg: ChannelMessage, c: ReplyClassification
+    rt: Runtime,
+    job: Job,
+    msg: ChannelMessage,
+    c: ReplyClassification,
+    *,
+    lifestyle: bytes | None = None,
 ) -> dict[str, str]:
+    """``lifestyle``: a lifestyle image made for this reply (AWAITING_APPROVAL only)."""
     unverified = [rt.labels[k] for k in c.unverified_fields]
     extra = [c.question] if c.question else []
     merged = job.model_copy(update={"facts": [*job.facts, *c.facts]})
 
     if job.state == JobState.NEEDS_INFO:
         missing = [rt.labels[k] for k in missing_required(rt, merged)]
-        questions = [*missing, *unverified, *extra]
+        questions = [*missing, *unverified, *sale_questions(rt, merged), *extra]
+        if sale_not_below(rt, merged, msg.rfc_message_id):
+            merged = transition(rt.jobs.get(job.job_id) or merged, JobState.NEEDS_INFO, rt.now())
+            merged = merged.model_copy(update={"facts": [*job.facts, *c.facts]})
+            rt.jobs.save(merged)
+            if questions:
+                _ask(rt, merged, msg, questions)
+            return {"job_id": job.job_id, "reply": "sale_not_below"}
         if questions:
             merged = transition(merged, JobState.NEEDS_INFO, rt.now())
             rt.jobs.save(merged)
@@ -78,9 +92,16 @@ async def apply_facts(
         return {"job_id": job.job_id, "reply": "generating"}
 
     # AWAITING_APPROVAL
-    if not c.facts:
+    if not c.facts and lifestyle is None:
         _ask(rt, job, msg, [*unverified, *extra])
         return {"job_id": job.job_id, "reply": "needs_info"}
+    if sale_blocked(rt, merged):
+        # the facts are kept, no version is made, and approval waits until the sale is fixed
+        # (or "בלי מבצע"): a version never shows a sale that would not be sent
+        rt.jobs.save(merged)
+        if not sale_not_below(rt, merged, msg.rfc_message_id):
+            _ask(rt, merged, msg, [*sale_questions(rt, merged), *unverified, *extra])
+        return {"job_id": job.job_id, "reply": "sale_pending"}
     if limit_reached(rt, job, msg):
         return {"job_id": job.job_id, "reply": "revision_limit"}
     text = None
@@ -106,6 +127,7 @@ async def apply_facts(
         owner_choice=merged.versions[-1].owner_choice,
         text=text,
         category=category,
+        lifestyle=lifestyle,
     )
     if unverified or extra:
         current = rt.jobs.get(job.job_id) or merged

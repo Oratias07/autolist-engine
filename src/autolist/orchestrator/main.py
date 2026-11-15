@@ -34,11 +34,18 @@ PROMPTS_IN_USE = (
     "classify_reply",
     "choose_category",
     "image_main",
+    "image_lifestyle",
     "system_json_output",
     "system_json_repair",
 )
 REPLIES_IN_USE = (
     "_category_none",
+    "_lifestyle_attached",
+    "_lifestyle_none",
+    "_sale_none",
+    "_sale_value",
+    "lifestyle_unavailable",
+    "sale_price_not_below",
     "approve_old_version",
     "approve_reply_to_preview",
     "approve_with_text",

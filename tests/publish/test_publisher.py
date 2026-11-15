@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -11,7 +12,7 @@ import httpx
 import pytest
 
 from autolist.core.blob_store import InMemoryBlobStore
-from autolist.core.models import ImageRef, ProductDraft
+from autolist.core.models import ImageRef, ProductDraft, SaleSpec
 from autolist.publish.errors import DuplicateProduct, UnobservedField, VerifyMismatch
 from autolist.publish.publisher import create_hidden
 from tests.publish.conftest import make_client, make_config
@@ -58,7 +59,24 @@ class Store:
             assert self.posted is not None
             # read shape observed in P1-02: categories come back as an object keyed by id
             cats = {str(i): [{"category_id": i}] for i in self.posted.get("product_category", [])}
-            p = {**self.posted, "image": CDN, "product_id": 970, "category": cats, **self.overrides}
+            # read shapes observed in P1-02
+            images = {
+                str(i["sort_order"]): {"image": CDN, "sort_order": i["sort_order"]}
+                for i in self.posted.get("images", [])
+            }
+            special = [
+                {**s, "price": f"{s['price']:.4f}", "customer_group_id": 1, "priority": 0}
+                for s in self.posted.get("product_special", [])
+            ]
+            p = {
+                **self.posted,
+                "image": CDN,
+                "product_id": 970,
+                "category": cats,
+                "images": images,
+                "special": special,
+                **self.overrides,
+            }
             return httpx.Response(200, json={"product": p})
         return httpx.Response(500)
 
@@ -102,12 +120,65 @@ async def test_duplicate_sends_no_post(field: str) -> None:
     assert store.posted is None
 
 
-async def test_extra_images_are_refused_before_any_call() -> None:
+def _extra(blobs: InMemoryBlobStore) -> ImageRef:
+    return blobs.put("job-1/lifestyle.jpg", b"life", "image/jpeg")
+
+
+SALE = SaleSpec(price=Decimal("5.9"), date_start=date(2026, 11, 15), date_end=date(2026, 11, 30))
+
+
+async def test_extra_image_and_sale_are_sent_on_create_and_verified() -> None:
+    """P1-02 write shapes: `images` (create only) and `product_special`."""
     blobs = InMemoryBlobStore()
-    extra = ImageRef(bucket="test-bucket", name="x.jpg", content_type="image/jpeg")
+    store = Store()
+    draft = _draft(blobs, price=Decimal("7.9"), extra_images=[_extra(blobs)], special=SALE)
+    await _run(store, draft, blobs)
+    assert store.posted is not None
+    [image] = store.posted["images"]
+    assert image["sort_order"] == 1 and "lifestyle.jpg" in image["image"]
+    assert store.posted["product_special"] == [
+        {"price": 5.9, "date_start": "2026-11-15", "date_end": "2026-11-30"}
+    ]
+
+
+async def test_no_extras_sends_neither_field() -> None:
+    blobs = InMemoryBlobStore()
+    store = Store()
+    await _run(store, _draft(blobs), blobs)
+    assert store.posted is not None
+    assert "images" not in store.posted and "product_special" not in store.posted
+
+
+@pytest.mark.parametrize(
+    ("overrides", "problem"),
+    [
+        ({"images": {}}, "extra images"),
+        ({"special": []}, "sale"),
+        (
+            {
+                "special": [
+                    {"price": "5.9000", "date_start": "2026-11-15", "date_end": "2026-12-01"}
+                ]
+            },
+            "sale",
+        ),
+    ],
+)
+async def test_a_missing_extra_or_sale_fails_the_verify(
+    overrides: dict[str, Any], problem: str
+) -> None:
+    blobs = InMemoryBlobStore()
+    draft = _draft(blobs, price=Decimal("7.9"), extra_images=[_extra(blobs)], special=SALE)
+    with pytest.raises(VerifyMismatch, match=problem):
+        await _run(Store(**overrides), draft, blobs)
+
+
+async def test_the_same_extra_image_twice_is_refused_before_any_call() -> None:
+    blobs = InMemoryBlobStore()
+    extra = _extra(blobs)
     store = Store()
     with pytest.raises(UnobservedField):
-        await _run(store, _draft(blobs, extra_images=[extra]), blobs)
+        await _run(store, _draft(blobs, extra_images=[extra, extra]), blobs)
     assert store.posted is None
 
 
