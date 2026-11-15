@@ -31,6 +31,7 @@ def _draft(blobs: InMemoryBlobStore, **kw: Any) -> ProductDraft:
         "sku": "SKU-1",
         "model": "M-1",
         "upc": None,
+        "stock_managed": True,
         "main_image": ref,
         "extra_images": [],
     }
@@ -117,6 +118,7 @@ async def test_extra_images_are_refused_before_any_call() -> None:
         ({"sku": "zzz"}, "sku"),
         ({"image": "https://elsewhere.example.com/a.jpg"}, "image"),
         ({"product_description": {"3": {"name": "אחר"}}}, "name"),
+        ({"subtract": 0}, "subtract"),
     ],
 )
 async def test_mismatch_raises_and_sends_no_delete_or_put(
@@ -167,3 +169,10 @@ async def test_unknown_sku_duplicate_model_found() -> None:
     store = Store(catalog=[{"sku": "x", "model": "M-1", "product_id": 5}])
     with pytest.raises(DuplicateProduct):
         await _run(store, _draft(blobs, sku=None), blobs)
+
+
+async def test_stock_management_is_sent() -> None:
+    blobs = InMemoryBlobStore()
+    store = Store()
+    await _run(store, _draft(blobs), blobs)
+    assert store.posted is not None and store.posted["subtract"] == 1

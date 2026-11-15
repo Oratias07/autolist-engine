@@ -169,3 +169,7 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
 **Implementation notes (2026-11-14).**
 - `create_hidden` returns the product id. The registry already records the created product.
 - The signed URL is registered with the log redaction filter before the POST.
+
+
+## Amendment (2026-11-15, DEV): stock management on
+`ProductDraft.stock_managed` → `subtract` in the create body (1 or 0), and the verifier checks it. Without it, iStores defaulted to 0 on product 1089146 (YTS-1001): the store did not limit orders to the stock. The value comes from the playbook (`stock.subtract`, DEV 15.11.2026: always on). The field was observed in P0-05: 87 of the 100 products read have 1.

@@ -52,6 +52,7 @@ def build_body(draft: ProductDraft, language_id: int, image_url: str) -> dict[st
         },
         "price": float(draft.price),
         "quantity": draft.quantity,
+        "subtract": 1 if draft.stock_managed else 0,  # observed in P0-05 (field map)
         "hidden": 1,
         "status": 0,
         "model": draft.model,

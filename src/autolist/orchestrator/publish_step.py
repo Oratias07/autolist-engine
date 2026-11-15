@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from autolist.channels.email.mail_sender import MAX_OUT_ATTACHMENT_BYTES
 from autolist.channels.email.own_attachment import fetch_own_attachment
 from autolist.core.models import Job, JobState, ProductDraft
+from autolist.core.playbook import require
 from autolist.core.state_machine import transition
 from autolist.images.postprocess import postprocess
 from autolist.orchestrator.generate_step import job_photos
@@ -62,6 +63,7 @@ def draft_of(rt: Runtime, job: Job, image: bytes) -> ProductDraft:
         sku=item_code.value if item_code else None,  # B-03; None: not sent (decision 15.11)
         model=_fact(job, "model"),
         upc=barcode.value if barcode else None,
+        stock_managed=bool(require(rt.playbook, "stock.subtract")),  # DEV 15.11: always on
         main_image=ref,
         extra_images=[],
     )

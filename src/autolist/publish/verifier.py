@@ -39,6 +39,8 @@ def created_problems(payload: Any, draft: ProductDraft, language_id: int) -> lis
         problems.append(f"price is {p.get('price')!r}")
     if _dec(p.get("quantity")) != Decimal(draft.quantity):
         problems.append(f"quantity is {p.get('quantity')!r}")
+    if _dec(p.get("subtract")) != Decimal(1 if draft.stock_managed else 0):
+        problems.append(f"subtract is {p.get('subtract')!r}")
     checks = [("model", draft.model)] + ([("sku", draft.sku)] if draft.sku is not None else [])
     for field, want in checks:
         if str(p.get(field) or "") != want:
