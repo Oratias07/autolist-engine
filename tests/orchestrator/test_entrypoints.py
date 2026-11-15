@@ -41,7 +41,12 @@ class FakeQueue:
 
 
 class Rig:
-    def __init__(self, gmail_results: dict[str, Any], cursor: str | None = "100") -> None:
+    def __init__(
+        self,
+        gmail_results: dict[str, Any],
+        cursor: str | None = "100",
+        runtime: Any = None,
+    ) -> None:
         cfg = parse_store_config(copy.deepcopy(VALID_STORE))
         self.owner = cfg.channels.email.allowed_senders[0]
         self.fs = FakeFirestore()
@@ -60,6 +65,7 @@ class Rig:
                     processed=ProcessedMessages(self.fs),
                     queue=self.queue,
                     health=lambda: self.health,
+                    runtime=lambda: runtime,
                     now=lambda: NOW,
                 )
             )
@@ -190,3 +196,33 @@ def test_cloud_tasks_refuses_plain_http() -> None:
 
     with pytest.raises(ValueError, match="https"):
         CloudTasksQueue(FakeTasksClient(), QueueTarget("p", "r", "q", "http://x", "i", 60))
+
+
+def test_job_task_runs_one_step() -> None:
+    from tests.orchestrator.rig import Rig as JobRig
+    from tests.orchestrator.rig import email, extraction, item
+
+    jobs = JobRig(extraction([item()]))
+    jobs.messages["g1"] = email("כיסא משרדי, דגם C1, 450, 3 יחידות")
+    rig = Rig({}, runtime=jobs.rt)
+    r = rig.client.post("/tasks/job", json={"event": "email_received", "gmail_id": "g1"})
+    assert (r.status_code, r.json()) == (200, {"opened": ["T-1"]})
+
+
+def test_job_task_failure_is_500_and_bad_body_400() -> None:
+    from tests.orchestrator.rig import Rig as JobRig
+    from tests.orchestrator.rig import extraction
+
+    rig = Rig({}, runtime=JobRig(extraction([])).rt)
+    assert rig.client.post("/tasks/job", json={"event": "nope"}).status_code == 500
+    assert rig.client.post("/tasks/job", json={"x": 1}).status_code == 400
+    assert rig.client.post("/tasks/job", content=b"not json").status_code == 400
+
+
+def test_watchdog_route() -> None:
+    from tests.orchestrator.rig import Rig as JobRig
+    from tests.orchestrator.rig import extraction
+
+    rig = Rig({}, runtime=JobRig(extraction([])).rt)
+    r = rig.client.post("/cron/watchdog")
+    assert (r.status_code, r.json()) == (200, {"failed": [], "expired": []})

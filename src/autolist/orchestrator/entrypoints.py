@@ -2,7 +2,8 @@
 
 Authentication is done by Cloud Run: the service is not public, and only the invoker service
 account may call it. Handlers therefore trust the caller and validate only the payload shape.
-`/tasks/job` and `/cron/watchdog` are added with the job runner (P1-04).
+`/tasks/job` runs one job step (``job_runner.run_task``); `/cron/watchdog` runs the daily
+watchdog. A step error is logged and answered with 500; Cloud Tasks does not retry (max 1).
 """
 
 from __future__ import annotations
@@ -21,10 +22,12 @@ from autolist.channels.email.inbox import poll_accepted, renew_watch
 from autolist.core.logging import get_logger
 from autolist.core.models import StoreConfig
 from autolist.core.state_store import ChannelStateStore, ProcessedMessages
+from autolist.orchestrator.job_runner import run_task
+from autolist.orchestrator.runtime import JOB_TASK_PATH, Runtime
 from autolist.orchestrator.tasks_queue import TaskQueue
+from autolist.orchestrator.watchdog import run_watchdog
 
 log = get_logger(__name__)
-JOB_TASK_PATH = "/tasks/job"
 
 
 @dataclass
@@ -35,6 +38,7 @@ class Deps:
     processed: ProcessedMessages
     queue: TaskQueue
     health: Callable[[], dict[str, Any]]
+    runtime: Callable[[], Runtime]  # built on first use (reads secrets)
     now: Callable[[], datetime] = lambda: datetime.now(UTC)
 
 
@@ -74,10 +78,29 @@ def create_app(deps: Deps) -> Starlette:
         log.info("gmail watch renewed", extra={"expires": expires})
         return JSONResponse({"watch_expires": expires})
 
+    async def task_job(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except ValueError:
+            payload = None
+        if not isinstance(payload, dict) or not isinstance(payload.get("event"), str):
+            return JSONResponse({"error": "not a job task"}, status_code=400)
+        try:
+            result = await run_task(deps.runtime(), payload)
+        except Exception:
+            log.exception("job task failed", extra={"event": payload.get("event")})
+            return JSONResponse({"error": "step failed"}, status_code=500)
+        return JSONResponse(result)
+
+    async def cron_watchdog(_: Request) -> JSONResponse:
+        return JSONResponse(run_watchdog(deps.runtime()))
+
     return Starlette(
         routes=[
             Route("/healthz", healthz, methods=["GET"]),
             Route("/events/gmail", gmail_push, methods=["POST"]),
             Route("/cron/renew-watch", cron_renew_watch, methods=["POST"]),
+            Route(JOB_TASK_PATH, task_job, methods=["POST"]),
+            Route("/cron/watchdog", cron_watchdog, methods=["POST"]),
         ]
     )

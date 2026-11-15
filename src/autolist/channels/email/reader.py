@@ -161,7 +161,10 @@ def fetch_message(
             )
         )
 
-    subject = next((v for n, v in headers if n.lower() == "subject"), None)
+    def header(name: str) -> str | None:
+        return next((v.strip() for n, v in headers if n.lower() == name), None)
+
+    subject = header("subject")
     received = datetime.fromtimestamp(int(res.get("internalDate", "0")) / 1000, tz=UTC)
     return ChannelMessage(
         channel="email",
@@ -173,4 +176,6 @@ def fetch_message(
         subject=subject,
         text=text,
         attachments=attachments,
+        rfc_message_id=header("message-id"),
+        in_reply_to=header("in-reply-to"),
     )

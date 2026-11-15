@@ -55,8 +55,10 @@ def test_monthly_cap_refuses_before_the_call(ledger_parts: tuple[CostLedger, Clo
     decision = ledger.authorize(None, "gemini", "image", Decimal("0.67"))
     assert decision.allowed is False
     assert "monthly cap" in decision.reason
-    with pytest.raises(CostCapExceeded):
+    assert decision.cap == "monthly"
+    with pytest.raises(CostCapExceeded) as err:
         ledger.require(None, "gemini", "image", Decimal("0.67"))
+    assert err.value.monthly is True
     assert ledger.authorize(None, "gemini", "image", Decimal("0.50")).allowed is True
 
 
@@ -66,6 +68,10 @@ def test_per_job_cap(ledger_parts: tuple[CostLedger, Clock]) -> None:
     assert ledger.job_spend("job-7") == Decimal("1.80")
     refused = ledger.authorize("job-7", "gemini", "image", Decimal("0.30"))
     assert refused.allowed is False and "per-job cap" in refused.reason
+    assert refused.cap == "per_job"
+    with pytest.raises(CostCapExceeded) as err:
+        ledger.require("job-7", "gemini", "image", Decimal("0.30"))
+    assert err.value.monthly is False
     assert ledger.authorize("job-8", "gemini", "image", Decimal("0.30")).allowed is True
     ledger.require("job-8", "gemini", "image", Decimal("0.30"))
 

@@ -53,8 +53,9 @@ class CostCapExceeded(AutolistError):
 
     code = "cost_cap_exceeded"
 
-    def __init__(self, reason: str) -> None:
+    def __init__(self, reason: str, *, monthly: bool = False) -> None:
         self.reason = reason
+        self.monthly = monthly  # the monthly cap (all paid work stops) vs the per-job cap
         super().__init__(reason)
 
 

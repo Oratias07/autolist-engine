@@ -216,7 +216,7 @@ class AnthropicClient:
         estimate = _usd(prices, est_in, req.max_output_tokens)
         decision = self._ledger.authorize(req.job_id, "anthropic", req.prompt, estimate)
         if not decision.allowed:
-            raise CostCapExceeded(decision.reason)
+            raise CostCapExceeded(decision.reason, monthly=decision.cap == "monthly")
 
         backoff = BACKOFF_START_S
         for attempt in range(1, MAX_TRIES + 1):

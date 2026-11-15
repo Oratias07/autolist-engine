@@ -122,6 +122,7 @@ class CostLedger:
         ):
             return CostDecision(
                 allowed=False,
+                cap="monthly",
                 reason=(
                     f"monthly cap {self._costs.monthly_cap} USD: spent {month_total}, "
                     f"{provider}/{operation} estimate {est_usd}"
@@ -132,6 +133,7 @@ class CostLedger:
             if job_total + est_usd > self._costs.per_job_cap:
                 return CostDecision(
                     allowed=False,
+                    cap="per_job",
                     reason=(
                         f"per-job cap {self._costs.per_job_cap} USD for {job_id}: spent "
                         f"{job_total}, {provider}/{operation} estimate {est_usd}"
@@ -149,7 +151,7 @@ class CostLedger:
         """``authorize`` that raises ``CostCapExceeded`` when refused."""
         decision = self.authorize(job_id, provider, operation, est_usd)
         if not decision.allowed:
-            raise CostCapExceeded(decision.reason)
+            raise CostCapExceeded(decision.reason, monthly=decision.cap == "monthly")
 
     def record(self, entry: CostEntry) -> list[CostAlert]:
         """Record a spend and return the alert events it newly triggered."""

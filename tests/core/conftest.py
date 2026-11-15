@@ -17,6 +17,7 @@ VALID_STORE: dict[str, Any] = {
         "languages": None,
         "required_name_languages": None,
         "stock_statuses": None,
+        "catalog_page_size": None,
     },
     "gcp": {"project_id": "example-project", "region": None, "reference_bucket": None},
     "secrets": {

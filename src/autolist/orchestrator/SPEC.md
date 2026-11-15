@@ -83,3 +83,20 @@ Files: `entrypoints.py` (Starlette app, wiring only) and `tasks_queue.py` (Cloud
 - **Rejected senders** are recorded with the reason and get no reply.
 - **Not yet here:** `/tasks/job` and `/cron/watchdog` arrive with the job runner (P1-04). Until then the push subscription is not created, so no owner email is accepted and then left unanswered.
 - **Authentication** is Cloud Run's: the service is not public, and only the invoker service account can call it.
+
+## Job runner (P1-04, fast track; behaviour approved in `docs/fast-track-pipeline.md`, 14–15.11.2026)
+Files, one step each, wiring only:
+| File | What it wires |
+| --- | --- |
+| `runtime.py` | `Runtime` (every dependency, built once per process) and send helpers: record sent ids on the job, open the job's own thread on its first email, `developer_alert` with the detail redacted like a log line. |
+| `intake_step.py` | A new owner email: receipt-thread reply → `reply_in_product_thread`; `parse_request`; no product → `no_product_found`; more than `agent.max_products_per_email` → `too_many_products`; unclear products, unassigned photos, or model questions with several products → `clarify_products` (no job). Otherwise one job per product, one `received` in the original thread, then per job: missing/unquoted required details or model questions → `NEEDS_INFO` + `needs_info` in the job's own thread; else the duplicate check, then `GENERATING` and a `generate` task. |
+| `duplicate_check.py` | Before `GENERATING`: the store already has the model → `duplicate_found` in the original thread, `CANCELLED` (reason `duplicate model`). No paid call is made for it. |
+| `generate_step.py` | `write_listing` (a failed check fails the job); the photos re-read from the owner's email and guarded again; image 1 = postprocess (free); image 2 = `image_main` on the job's photos, postprocessed. Any image error (402 included) → image 1 and a developer alert. `build_preview`, the image-note fragment, send, record the version with the preview's gmail id, `AWAITING_APPROVAL`. |
+| `watchdog.py` | Active past `agent.job_step_timeout_s` → `FAILED` (`failed` + developer alert). Waiting with no change for `agent.expire_after_days` → `EXPIRED` + `expired`. |
+| `job_runner.py` | `run_task(rt, payload)`: `email_received` and `generate`. A step error after a job exists fails the job: `failed`, or `failed_budget` when the monthly cap refused the call (`CostCapExceeded.monthly`), plus a developer alert. Nothing is retried. A reply in a job thread raises `ReplyHandlingNotReady` after a developer alert, until reply handling lands (next PR). |
+
+Entrypoints: `POST /tasks/job` (400 on a body without `event`, 500 on a step error, logged) and `POST /cron/watchdog`.
+
+Config used: `istores.catalog_page_size` (new, store.yaml; observed 100 in P0-05), `agent.*`, `images.model`, `images.output_px`.
+
+Acceptance (tests in `tests/orchestrator/`): P1-08 cases 2, 9, 10, 12, 13, 14 and the no-product, receipt-thread, budget, watchdog and redaction cases. Cases 1, 3, 4, 5 need reply handling and publish (next PR); 6 is covered by `channels` and the entrypoint tests.

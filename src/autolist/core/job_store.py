@@ -19,6 +19,7 @@ class JobStore(Protocol):
     def get(self, job_id: str) -> Job | None: ...
     def by_thread(self, thread_id: str) -> Job | None: ...
     def open_jobs(self) -> list[Job]: ...
+    def by_source_thread(self, thread_id: str) -> list[Job]: ...
 
 
 class InMemoryJobStore:
@@ -45,6 +46,10 @@ class InMemoryJobStore:
 
     def open_jobs(self) -> list[Job]:
         return [j for j in self.jobs.values() if j.state not in FINAL]
+
+    def by_source_thread(self, thread_id: str) -> list[Job]:
+        jobs = [j for j in self.jobs.values() if j.source_thread_id == thread_id]
+        return sorted(jobs, key=lambda j: j.number)
 
 
 class FirestoreJobStore:
@@ -76,8 +81,15 @@ class FirestoreJobStore:
         return self.get(str((snap.to_dict() or {})["job_id"]))
 
     def open_jobs(self) -> list[Job]:
-        jobs = [Job.model_validate(s.to_dict()) for s in self._jobs.stream()]
-        return [j for j in jobs if j.state not in FINAL]
+        return [j for j in self._all() if j.state not in FINAL]
+
+    def by_source_thread(self, thread_id: str) -> list[Job]:
+        jobs = [j for j in self._all() if j.source_thread_id == thread_id]
+        return sorted(jobs, key=lambda j: j.number)
+
+    def _all(self) -> list[Job]:
+        # a full scan: the fast track has few jobs, and it needs no composite index
+        return [Job.model_validate(s.to_dict()) for s in self._jobs.stream()]
 
 
 def new_job(

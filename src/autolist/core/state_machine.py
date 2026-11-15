@@ -52,6 +52,6 @@ def transition(job: Job, target: JobState, now: datetime, error: str | None = No
             "state": target,
             "updated_at": now,
             "active_since": now if target in ACTIVE else None,
-            "error": error if target == S.FAILED else job.error,
+            "error": error if error is not None else job.error,  # FAILED or CANCELLED reason
         }
     )
