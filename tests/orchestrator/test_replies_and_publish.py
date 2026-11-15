@@ -9,7 +9,6 @@ import pytest
 from autolist.core.models import JobState
 from autolist.images.errors import ImageRequestRejected
 from autolist.orchestrator.job_runner import run_task
-from autolist.orchestrator.reply_step import ReplyHandlingNotReady
 from tests.orchestrator.rig import EMAIL_TEXT, Rig, _MessagesById, email, extraction, item
 
 S = JobState
@@ -154,14 +153,6 @@ async def test_approve_while_not_waiting_gets_status() -> None:
     assert (await _reply(rig, "מאשר"))["reply"] == "status"
     assert rig.mail.sent[-1].variables["status_lines"].endswith(": s-publishing")
     assert sum(1 for t in rig.queue.tasks if t[1]["event"] == "publish") == 1
-
-
-async def test_other_reply_alerts_developer_until_the_classifier() -> None:
-    rig = await _ready()
-    with pytest.raises(ReplyHandlingNotReady):
-        await _reply(rig, "המחיר 480")
-    assert rig.mail.sent[-1].template == "developer_alert"
-    assert _job(rig).state == S.AWAITING_APPROVAL
 
 
 async def test_verify_mismatch_fails_job_and_keeps_product_hidden() -> None:

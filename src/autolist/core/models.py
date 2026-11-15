@@ -386,6 +386,7 @@ class JobVersion(_Strict):
     description_text: str  # the same text as plain lines, for a later preview of this version
     open_points: list[str] = Field(default_factory=list)  # shown again in a later preview
     image_choice: Literal[1, 2]
+    owner_choice: Literal[1, 2] | None = None  # set once the owner replied "תמונה 1/2"; kept
     image_options: list[Literal[1, 2]] = Field(default_factory=list)  # attached to the preview
     preview_gmail_id: str | None = None  # the sent preview; image 2 is read back from it (#36)
     preview_rfc_message_id: str | None  # Message-ID of the preview email, set once sent
@@ -399,6 +400,24 @@ class ListingText(_Strict):
     description_text: str  # the same content as plain lines, for the preview email
     open_points: list[str]  # things the writer could not decide; shown, never filled in
     problems: list[str]  # failed checks (unknown fact ids, unsupported numbers, voice)
+
+
+class ReplyIntent(StrEnum):
+    FACTS = "facts"
+    WORDING_OR_IMAGE = "wording_or_image"
+    STATUS = "status"
+    OTHER = "other"
+    UNCLEAR = "unclear"
+
+
+class ReplyClassification(_Strict):
+    """A reply that is not an exact command, after the quote check (classify_reply v1)."""
+
+    intent: ReplyIntent
+    facts: list[JobFact]  # only values whose quote is an exact substring of the reply
+    unverified_fields: list[str]  # values given without an exact quote: dropped, asked
+    also_wording_or_image: bool
+    question: str  # Hebrew, from the model; empty when none
 
 
 class Job(_Strict):

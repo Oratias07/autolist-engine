@@ -22,7 +22,7 @@ from autolist.core.state_machine import FINAL
 from autolist.orchestrator.generate_step import generate
 from autolist.orchestrator.intake_step import handle_new_email, read
 from autolist.orchestrator.publish_step import publish
-from autolist.orchestrator.reply_step import ReplyHandlingNotReady, handle_reply
+from autolist.orchestrator.reply_step import handle_reply
 from autolist.orchestrator.runtime import Runtime, alert_developer
 from autolist.orchestrator.watchdog import fail_job
 
@@ -40,9 +40,7 @@ async def run_task(rt: Runtime, payload: dict[str, Any]) -> dict[str, Any]:
         job = rt.jobs.by_thread(msg.thread_id)
         if job is not None:
             try:
-                return dict(handle_reply(rt, job, msg))
-            except ReplyHandlingNotReady:
-                raise
+                return dict(await handle_reply(rt, job, msg))
             except Exception as exc:
                 current = rt.jobs.get(job.job_id) or job
                 if current.state not in FINAL:

@@ -11,6 +11,13 @@ File: `commands.py`. Pure.
 - No model is involved. A model can never approve.
 - Tests: `tests/agent_runtime/test_commands.py` ("לא מאשר", "מאשר אבל…", "מאשר!", a phone signature line: none is a command).
 
+## Fast track — reply classifier (approved, DEV 15.11.2026: classify_reply v1, model Haiku)
+File: `classifier.py`. `classify_reply(message, *, llm, job_context, job_id) -> ReplyClassification` (core).
+- One call on the `classify` model, strict JSON, no tools. The reply is untrusted; `job_context` is built by the orchestrator from trusted data only (state, version number, the names of known fields, no owner text).
+- Intents: `facts`, `wording_or_image`, `status`, `other`, `unclear`. There is no approve or cancel intent, so a model can never approve.
+- Every fact must quote the reply exactly, or it is dropped and listed in `unverified_fields`. `facts` with nothing stated becomes `unclear`.
+- Live eval before first use: engine `scripts/spike/classify_eval.py` on store `fixtures/samples/p1-07-classify.yaml` (store `live` workflow, task `p1-07-classify-eval`, paid, no store writes).
+
 # agent_runtime
 
 ## Purpose
