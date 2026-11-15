@@ -24,7 +24,7 @@ File: `preview.py`. Pure, no I/O.
 | `printed_text` true | 1 | 1, 2 | `image_note_printed_text` |
 | `printed_text` false | 2 | 2 | `image_note_generated` |
 
-**Optional details shown.** Only those the fast-track listing uses: barcode, keywords, plus the writer's open points. None missing → `labels["_none"]`. Sale price is extracted but not saved in the fast track (no observed write shape), so it is not listed.
+**Optional details shown.** Only those the fast-track listing uses: barcode, keywords. The writer's open points are not shown (P1-08, DEV 15.11.2026): the owner answered them, and the fast track could not use the answers. None missing → `labels["_none"]`. Sale price is extracted but not saved in the fast track (no observed write shape), so it is not listed.
 
 **Errors.** `PreviewError` (never a guess): text with failed checks; price, quantity or model missing; `printed_text` unknown with a photo; image 2 chosen without a generated image.
 

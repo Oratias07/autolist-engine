@@ -113,7 +113,9 @@ def test_unverified_sender_is_refused(
 
 
 def test_strip_quoted_variants() -> None:
-    assert strip_quoted("שלום\nOn Sun, Nov 15 2026 Owner wrote:\n> old") == "שלום"
+    assert (
+        strip_quoted("שלום\nOn Sun, Nov 15 2026 Owner <owner@example.com> wrote:\n> old") == "שלום"
+    )
     assert strip_quoted("‏תשובה\n‫בתאריך יום א׳, 15 בנוב׳ מאת X <x@y>:‬\n> a") == "‏תשובה"
     assert strip_quoted("טקסט\n> ציטוט\n>\n") == "טקסט"
     assert strip_quoted("כתבתי: מחיר 5") == "כתבתי: מחיר 5"
@@ -170,4 +172,31 @@ def test_phone_signature_line_is_cut(tail: str) -> None:
     ],
 )
 def test_content_that_looks_like_a_signature_is_kept(text: str) -> None:
+    assert strip_quoted(text) == text
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        # observed 15.11.2026: Gmail wrapped the Hebrew header after "<", with direction marks
+        "‫בתאריך יום א׳, 15 בנוב׳ 2026 ב-18:14 מאת <‪\nagent@example.com‬‏>:‬",
+        "On Sun, Nov 15, 2026 at 6:14 PM Agent <\nagent@example.com> wrote:",
+        "בתאריך יום א׳, 15 בנוב׳ 2026 ב-18:14 מאת <agent@example.com>:",
+    ],
+)
+def test_wrapped_quote_header_is_cut(header: str) -> None:
+    from autolist.agent_runtime.commands import parse_command
+
+    text = strip_quoted(f"מאשר\n\n{header}\n\n> שלום יקיר,\n> גרסה 1\n")
+    assert text == "מאשר"
+    assert parse_command(text, {"approve": "מאשר"}) == "approve"
+
+
+def test_line_starting_like_a_header_without_its_end_is_kept() -> None:
+    text = "בתאריך 20.11 אגיע לחנות\nמאת יקיר"
+    assert strip_quoted(text) == text
+
+
+def test_content_ending_with_a_colon_is_not_a_header() -> None:
+    text = "מאשר\nבתאריך 20.11 מאת הספק יגיעו:\n- המחיר 480"
     assert strip_quoted(text) == text

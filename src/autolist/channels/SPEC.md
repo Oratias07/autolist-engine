@@ -128,3 +128,7 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 
 ## Amendment (2026-11-15, DEV): phone "sent from" lines
 `strip_quoted` also cuts a phone mail app's default line ("Sent from my iPhone", "נשלח מה-iPhone שלי", "Get Outlook for Android" and the other exact forms in `reader._DEVICE_LINES`). Only the last non-empty line is cut, only on a full match, so content that merely starts like one ("נשלח מהמחסן מחר") is kept. Without it, "מאשר" from a phone would not count as a command (safe, but the owner would be asked again).
+
+
+## Amendment (2026-11-15, P1-08): the agent's own sent messages
+`email/own_sent.py`: `sent_by_rfc_id` and `sent_by_gmail_id` return the thread and send time of a message only when it is `SENT` from `agent_mailbox`. Only a well-formed Message-ID goes into the Gmail search (`rfc822msgid:… in:sent`). Read-only.

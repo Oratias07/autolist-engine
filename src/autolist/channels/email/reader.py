@@ -111,13 +111,31 @@ def _device_line(line: str) -> bool:
     return _DEVICE_LINES.fullmatch(plain) is not None
 
 
+_HEADER_LINES = 3  # Gmail wraps a long quote header in text/plain (observed 15.11.2026)
+
+
+def _quote_header(lines: list[str], i: int) -> bool:
+    """A reply's quote header starting at line i, possibly wrapped over up to 3 lines."""
+    first = _BIDI.sub("", lines[i]).strip()
+    if not (first.startswith("בתאריך") or first.startswith("On ")):
+        return False
+    for n in range(1, _HEADER_LINES + 1):
+        head = " ".join(_BIDI.sub("", x).strip() for x in lines[i : i + n])
+        # the sender's address is always in the header: content that merely ends with ":" is kept
+        if (
+            head.endswith(":")
+            and "@" in head
+            and ((head.startswith("בתאריך") and "מאת" in head) or _EN_QUOTE.match(head))
+        ):
+            return True
+    return False
+
+
 def strip_quoted(text: str) -> str:
     lines = text.splitlines()
     for i, line in enumerate(lines):
-        plain = _BIDI.sub("", line).strip()
-        hebrew = plain.startswith("בתאריך") and "מאת" in plain and plain.endswith(":")
         signature = line.rstrip("\r") in ("--", "-- ")  # RFC 3676 signature delimiter
-        if _EN_QUOTE.match(plain) or hebrew or signature:
+        if _quote_header(lines, i) or signature:
             lines = lines[:i]
             break
     while lines and (lines[-1].lstrip().startswith(">") or not lines[-1].strip()):
