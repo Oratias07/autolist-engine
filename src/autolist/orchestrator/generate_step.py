@@ -112,6 +112,8 @@ def generate(rt: Runtime, job: Job) -> Job:
                     created_at=rt.now(),
                     title=text.title,
                     description_html=text.description_html,
+                    description_text=text.description_text,
+                    open_points=text.open_points,
                     image_choice=preview.image_choice,
                     image_options=preview.image_options,
                     preview_gmail_id=sent.gmail_id,

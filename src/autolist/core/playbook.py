@@ -45,13 +45,37 @@ def load_voice_principles() -> str:
     return text[text.index(start) : text.index(end)].strip()
 
 
-def load_field_labels() -> dict[str, str]:
-    """Hebrew labels of owner fields for agent emails (store repo, agent/field_labels.yaml)."""
-    path = store_dir() / "agent" / "field_labels.yaml"
+def _labels(file: str) -> dict[str, str]:
+    path = store_dir() / "agent" / file
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     labels = data.get("labels") if isinstance(data, dict) else None
     if not isinstance(labels, dict) or not all(
         isinstance(k, str) and isinstance(v, str) for k, v in labels.items()
     ):
-        raise ConfigMissing("agent/field_labels.yaml labels")
+        raise ConfigMissing(f"agent/{file} labels")
     return labels
+
+
+def load_field_labels() -> dict[str, str]:
+    """Hebrew labels of owner fields for agent emails (store repo, agent/field_labels.yaml)."""
+    return _labels("field_labels.yaml")
+
+
+def load_state_labels() -> dict[str, str]:
+    """Hebrew job-state lines for status replies (store repo, agent/state_labels.yaml)."""
+    return _labels("state_labels.yaml")
+
+
+COMMANDS = ("approve", "cancel", "image_1", "image_2")
+
+
+def load_commands() -> dict[str, str]:
+    """The exact reply command words (store repo, agent/commands.yaml); all four, non-empty."""
+    path = store_dir() / "agent" / "commands.yaml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    words = data.get("commands") if isinstance(data, dict) else None
+    if not isinstance(words, dict) or set(words) != set(COMMANDS):
+        raise ConfigMissing("agent/commands.yaml commands")
+    if not all(isinstance(v, str) and v.strip() for v in words.values()):
+        raise ConfigMissing("agent/commands.yaml commands (empty word)")
+    return {k: str(v) for k, v in words.items()}

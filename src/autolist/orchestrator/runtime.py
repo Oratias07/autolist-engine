@@ -36,6 +36,8 @@ class Runtime:
     glossary: dict[str, Any]
     voice: str
     labels: dict[str, str]
+    states: dict[str, str]  # status lines per job state (agent/state_labels.yaml)
+    commands: dict[str, str]  # exact reply commands (agent/commands.yaml)
     jobs: JobStore
     gmail: Callable[[], Any]  # Gmail API service of the agent mailbox
     mail: Mailer
