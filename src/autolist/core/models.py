@@ -385,6 +385,16 @@ class JobVersion(_Strict):
     preview_rfc_message_id: str | None  # Message-ID of the preview email, set once sent
 
 
+class ListingText(_Strict):
+    """Title and description for one product, written only from its facts."""
+
+    title: str
+    description_html: str  # rendered in code from the playbook sections, then sanitized
+    description_text: str  # the same content as plain lines, for the preview email
+    open_points: list[str]  # things the writer could not decide; shown, never filled in
+    problems: list[str]  # failed checks (unknown fact ids, unsupported numbers, voice)
+
+
 class Job(_Strict):
     job_id: str  # e.g. "YTS-1001"
     number: int = Field(gt=0)
