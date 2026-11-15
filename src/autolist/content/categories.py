@@ -18,7 +18,7 @@ from autolist.core.models import CategoryChoice, JobFact, StoreCategory
 from autolist.core.playbook import require
 from autolist.llm.client import LLMClient, LLMRequest
 
-MAX_OUTPUT_TOKENS = 400
+MAX_OUTPUT_TOKENS = 1500  # 400 truncated real answers (eval run 43762137569)
 FACT_KEYS = ("name", "keywords", "detail")
 
 
