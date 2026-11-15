@@ -48,12 +48,37 @@ def test_any_other_recipient_is_refused(email_cfg: EmailChannelConfig) -> None:
     assert gmail.calls == []
 
 
-def test_no_thread_and_attachments_refused(email_cfg: EmailChannelConfig) -> None:
+def test_no_thread_and_non_jpeg_attachments_refused(email_cfg: EmailChannelConfig) -> None:
     mime = build_mime(_msg(), email_cfg, REPLIES)
     assert mime["In-Reply-To"] is None
-    att = Attachment(filename="a.pdf", mime_type="application/pdf", size_bytes=1)
+    att = Attachment(filename="a.pdf", mime_type="application/pdf", size_bytes=1, data=b"x")
     with pytest.raises(AttachmentRejected):
         build_mime(_msg(attachments=[att]), email_cfg, REPLIES)
+    big = Attachment(filename="b.jpg", mime_type="image/jpeg", size_bytes=1, data=b"x" * 5_000_001)
+    with pytest.raises(AttachmentRejected, match="large"):
+        build_mime(_msg(attachments=[big]), email_cfg, REPLIES)
+
+
+def test_jpeg_attachment_is_added(email_cfg: EmailChannelConfig) -> None:
+    att = Attachment(filename="image-2.jpg", mime_type="image/jpeg", size_bytes=3, data=b"abc")
+    mime = build_mime(_msg(attachments=[att]), email_cfg, REPLIES)
+    files = [p for p in mime.iter_attachments()]
+    assert [(p.get_filename(), p.get_content()) for p in files] == [("image-2.jpg", b"abc")]
+
+
+def test_extra_recipient_only_when_allowed(email_cfg: EmailChannelConfig) -> None:
+    msg = _msg(to="dev@example.com")
+    with pytest.raises(RecipientNotAllowed):
+        build_mime(msg, email_cfg, REPLIES)
+    mime = build_mime(msg, email_cfg, REPLIES, frozenset({"dev@example.com"}))
+    assert mime["To"] == "dev@example.com"
+
+
+def test_deliver_reads_back_thread_and_message_id(email_cfg: EmailChannelConfig) -> None:
+    meta = {"threadId": "t9", "payload": {"headers": [{"name": "Message-Id", "value": "<x@y>"}]}}
+    g = FakeGmail({"send": {"id": "g-3"}, "get": [meta]})
+    sent = GmailSender(g, email_cfg, REPLIES).deliver(_msg())
+    assert (sent.gmail_id, sent.thread_id, sent.rfc_message_id) == ("g-3", "t9", "<x@y>")
 
 
 def test_logs_never_contain_the_body(

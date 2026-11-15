@@ -469,6 +469,12 @@ class OutboundMessage(_Strict):
     attachments: list[Attachment] = Field(default_factory=list)
 
 
+class SentMessage(_Strict):
+    gmail_id: str
+    thread_id: str
+    rfc_message_id: str  # read back from the sent message; owner replies quote it
+
+
 class HealthStatus(_Strict):
     ok: bool
     checked_at: datetime

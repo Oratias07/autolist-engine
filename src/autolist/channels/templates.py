@@ -71,7 +71,18 @@ def load_reply(name: str, folder: Path | None = None) -> ReplyTemplate:
     return ReplyTemplate(name, subject, variables, body)
 
 
+def render_fragment(name: str, variables: dict[str, str], folder: Path | None = None) -> str:
+    """A template body without subject or signature, for insertion into another reply."""
+    return _render(name, variables, folder)[1]
+
+
 def render_reply(name: str, variables: dict[str, str], folder: Path | None = None) -> RenderedReply:
+    subject, body = _render(name, variables, folder)
+    _, signature = _read("_signature", folder)
+    return RenderedReply(subject=subject, body=f"{body}\n\n{signature}\n")
+
+
+def _render(name: str, variables: dict[str, str], folder: Path | None) -> tuple[str, str]:
     tpl = load_reply(name, folder)
     declared, given = set(tpl.variables), set(variables)
     if missing := declared - given:
@@ -83,5 +94,4 @@ def render_reply(name: str, variables: dict[str, str], folder: Path | None = Non
         body = _env.from_string(tpl.body).render(**variables).strip()
     except TemplateError as exc:
         raise TemplateVariableError(f"reply {name}: {exc}") from exc
-    _, signature = _read("_signature", folder)
-    return RenderedReply(subject=subject, body=f"{body}\n\n{signature}\n")
+    return subject, body
