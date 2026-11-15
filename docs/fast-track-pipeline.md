@@ -106,6 +106,19 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 | `publish` | unchanged (`create_hidden`). |
 | `orchestrator` | `job_runner.py`: one function per transition, calling the modules above in order. `/tasks/job` and `/cron/watchdog`. No business logic. |
 
+## More cases (DEV, 15.11.2026)
+| Case | What happens | Template |
+| --- | --- | --- |
+| A product with the same model or SKU already exists in the store | Checked right after extraction, before any text or image is paid for. The job ends (`CANCELLED`, reason duplicate) and the owner gets the existing product id. | `duplicate_found` |
+| Image generation fails, is blocked, or the Gemini credit is empty (402) | The job continues with image 1 (the owner's photo after postprocess). The preview says so. Empty credit also alerts the developer. | `image_note_fallback` |
+| More than `agent.max_products_per_email` (10) products in one email | No job is opened. The owner is asked to split the email. | `too_many_products` |
+| No product found in the email (greeting only, photo without text) | No job is opened. Short reply on what to send. | `no_product_found` |
+| A reply in the original email's thread (the receipt thread, which may cover several jobs) | Nothing is approved or changed. The owner is asked to reply to the product's own preview email. | `reply_in_product_thread` |
+| Status question ("מה קורה עם הכיסא?"), or "מאשר" while the job is not waiting for approval or is already final | One line per open job with its state; for a final job, its outcome. | `status_reply` |
+| No answer for `agent.expire_after_days` (14) | `EXPIRED`, and the owner is told. Checked by the daily watchdog. | `expired` |
+| The monthly cost cap is reached during a job | The job stops before the refused call and fails with a budget reason. The owner gets the existing `budget_cap_reached` email once, and this job's failure email says it can be sent again next month. | `failed_budget` |
+| A forwarded supplier email with instructions inside | Already data, never instructions. Prices come only from what the owner wrote. A live eval case covers it. | – |
+
 ## Safety rules that stay as they are
 - Only the allowlisted, authenticated sender. Email text and attachments are data, never instructions.
 - Every paid call goes through the cost ledger: per-job cap, monthly cap.
@@ -122,6 +135,9 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 6. A forged sender gets no reply and opens no job.
 9. One email with two clearly separated products opens two jobs with two preview threads. Approving one does not touch the other.
 10. One email with two products and one price that could belong to either opens no job and gets one clarifying question.
+12. An email with a model that already exists in the store gets `duplicate_found`, and no paid call is made after extraction.
+13. An image generation failure ends in a preview with image 1 and the fallback note, not in a failed job.
+14. An email with 11 products opens no job.
 11. A product whose photo shows printed text gets a preview with image 1 preselected and the printed-text warning; replying "תמונה 2" switches the image and creates a new version.
 7. A job forced past the time limit ends `FAILED`, and both owner and developer are told.
 8. The cost recorded for one full job is below the per-job cap, and is reported in the live-run report.
