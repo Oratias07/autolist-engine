@@ -9,7 +9,8 @@ Body text:
   (scripts and styles dropped, tags removed, entities unescaped);
 - an unknown charset falls back to UTF-8 with replacement characters;
 - quoted history from earlier messages in the thread is cut ("On ... wrote:",
-  the Hebrew Gmail line "בתאריך ... מאת ...:", and trailing ">" lines).
+  the Hebrew Gmail line "בתאריך ... מאת ...:", and trailing ">" lines), and so is the
+  signature below the standard "-- " line (observed in a real owner email, 15.11.2026).
 
 Attachments: every part with a file name (attached or inline). A part larger than
 `max_bytes` is listed with no data and is never downloaded; the intake guard rejects it.
@@ -94,7 +95,8 @@ def strip_quoted(text: str) -> str:
     for i, line in enumerate(lines):
         plain = _BIDI.sub("", line).strip()
         hebrew = plain.startswith("בתאריך") and "מאת" in plain and plain.endswith(":")
-        if _EN_QUOTE.match(plain) or hebrew:
+        signature = line.rstrip("\r") in ("--", "-- ")  # RFC 3676 signature delimiter
+        if _EN_QUOTE.match(plain) or hebrew or signature:
             lines = lines[:i]
             break
     while lines and (lines[-1].lstrip().startswith(">") or not lines[-1].strip()):
