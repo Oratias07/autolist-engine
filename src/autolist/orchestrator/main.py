@@ -4,7 +4,7 @@ Run as ``uvicorn autolist.orchestrator.main:app``. Every client-specific value c
 store repo copied into the image (``AUTOLIST_STORE_DIR``) and from Secret Manager by name.
 The only environment value is ``AUTOLIST_SERVICE_URL`` (known after the first deploy; the deploy
 workflow sets it). Secrets and clients are built on first use, so a missing secret fails the
-request that needs it, and ``/healthz`` reports it, instead of a crash loop at start.
+request that needs it, and ``/health`` reports it, instead of a crash loop at start.
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ def queue() -> CloudTasksQueue:  # pragma: no cover - live only
 
 class _LazyQueue:
     """The real queue is built on the first enqueue: the service URL is unset before the first
-    deploy finishes, and the app must still start (``/healthz``)."""
+    deploy finishes, and the app must still start (``/health``)."""
 
     def enqueue(self, path: str, payload: dict[str, Any]) -> str:  # pragma: no cover
         return queue().enqueue(path, payload)

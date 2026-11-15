@@ -104,7 +104,7 @@ def create_app(deps: Deps) -> Starlette:
 
     return Starlette(
         routes=[
-            Route("/healthz", healthz, methods=["GET"]),
+            Route("/health", healthz, methods=["GET"]),
             Route("/events/gmail", gmail_push, methods=["POST"]),
             Route("/cron/renew-watch", cron_renew_watch, methods=["POST"]),
             Route(JOB_TASK_PATH, task_job, methods=["POST"]),

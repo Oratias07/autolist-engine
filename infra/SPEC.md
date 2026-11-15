@@ -48,7 +48,7 @@ Run the engine as a service that wakes up when the agent mailbox gets mail, work
 | `POST /tasks/job` | Cloud Tasks | Runs one job step (minutes). |
 | `POST /cron/renew-watch` | Scheduler | Renews the Gmail watch, stores the new expiry. |
 | `POST /cron/watchdog` | Scheduler | Fails stuck jobs and tells the owner and the developer contact. |
-| `GET /healthz` | deploy check | Config loads, secrets are readable (metadata only), Firestore reachable. |
+| `GET /health` | deploy check | Config loads, secrets are readable (metadata only), Firestore reachable. |
 
 There is no public endpoint in this phase. The owner's preview goes by email (P1-07).
 
@@ -101,7 +101,7 @@ Designed to stay inside the Always Free quotas at the expected volume (tens of p
 ## Acceptance criteria (P1-03)
 1. `infra/setup.sh` run twice in a row: the second run creates nothing and exits 0.
 2. The service URL returns 403 without a token.
-3. After deploy, `/healthz` (called with the invoker's token by the deploy workflow) returns ok.
+3. After deploy, `/health` (called with the invoker's token by the deploy workflow) returns ok.
 4. A deploy with `--stage prod` while any secret has `stage=dev` is refused, and nothing is deployed.
 5. An email from the allowlisted sender produces one `processed_messages` document and one queued task. The same Pub/Sub message delivered twice produces no second task.
 6. `renew-watch` run by Scheduler moves the stored watch expiry forward.
@@ -112,16 +112,18 @@ Designed to stay inside the Always Free quotas at the expected volume (tens of p
 
 ## Service image, deploy and part 2 (P1-03, 15.11.2026)
 - **Image:** `Dockerfile` at the engine root. Python 3.12 slim, `uv sync --frozen --no-dev`, runs as a non-root user, `uvicorn autolist.orchestrator.main:app`. The build context has `engine/` and `store/`. `store/` holds only `store.yaml`, `playbook/`, `agent/` and `docs/voice.md`: no fixtures, no live runs. Engine CI builds the image with an empty store and checks that the app module imports.
-- **`orchestrator/main.py`:** wiring only. Clients and secrets are built on first use, so a missing secret fails the request that needs it and shows in `/healthz`. The app does not crash at start. The only environment value is `AUTOLIST_SERVICE_URL`, set by the deploy workflow after the first deploy. `gcp.tasks_queue` and `gcp.invoker_service_account` are new `store.yaml` keys.
+- **`orchestrator/main.py`:** wiring only. Clients and secrets are built on first use, so a missing secret fails the request that needs it and shows in `/health`. The app does not crash at start. The only environment value is `AUTOLIST_SERVICE_URL`, set by the deploy workflow after the first deploy. `gcp.tasks_queue` and `gcp.invoker_service_account` are new `store.yaml` keys.
 - **Blocking work off the event loop:** a job step runs in its own thread and event loop. The Gmail push, health and watchdog handlers run in the thread pool. A long step never delays a push acknowledgement.
 - **Deploy (store repo `.github/workflows/deploy.yml`):**
   - Runs manually, from `main` only, with a full engine commit sha.
   - Stage gate: `prod` refuses while any secret is labelled `stage=dev`.
   - Builds and pushes the image, then `gcloud run deploy autolist-<stage>`. The service is not public, runs 0–1 instances with concurrency 8, 1 CPU and 1 GiB. The request timeout is `agent.job_step_timeout_s` + 60 s.
-  - Checks that a call without a token gets 403. Once part 2 has granted the CI account `run.invoker`, it also checks `/healthz` with an ID token.
+  - Checks that a call without a token gets 403. Once part 2 has granted the CI account `run.invoker`, it also checks `/health` with an ID token.
 - **Part 2 (`infra/setup-part2.sh`, DEV in Cloud Shell after the first deploy):**
   - `run.invoker` for `autolist-invoke` and `autolist-ci`.
   - The Pub/Sub service agent may sign the push with the invoker's token.
   - Push subscription `<service>-push`: OIDC, 10-minute retention, no dead letter.
   - Two daily Scheduler jobs, with no retries: `renew-watch` at 06:17 and `watchdog` at 06:43, in the store's time zone.
   - One immediate `renew-watch` run, so the mailbox is watched from that moment.
+
+- **Observed 15.11.2026 (first deploy, run 43708500564):** `/healthz` got Google's own 404 before reaching the service. Cloud Run reserves some paths that end in `z` (Cloud Run known issues: avoid every path ending in `z`). The health route is now `/health`. No other route ends in `z`.
