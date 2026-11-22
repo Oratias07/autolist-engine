@@ -25,6 +25,7 @@ from autolist.core.models import (
 )
 from autolist.core.sale import without_sale
 from autolist.core.state_machine import FINAL, transition
+from autolist.orchestrator.cancel_step import cancel_by_text
 from autolist.orchestrator.generate_step import (
     job_photos,
     lifestyle_failed,
@@ -202,9 +203,14 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
     if msg.rfc_message_id:  # the newest message of the thread: every answer follows it
         job = job.model_copy(update={"last_rfc_message_id": msg.rfc_message_id})
         rt.jobs.save(job)
+    command = parse_command(msg.text, rt.commands)
+    if command is None:  # "בטל את שני המוצרים": any job of the same owner email
+        siblings = rt.jobs.by_source_thread(job.source_thread_id) or [job]
+        done = cancel_by_text(rt, siblings, msg, here=job)
+        if done is not None:
+            return done
     if job.state in FINAL:
         return _status(rt, job, msg)
-    command = parse_command(msg.text, rt.commands)
     waiting = job.state == JobState.AWAITING_APPROVAL
     if command == "approve":
         return _approve(rt, job, msg) if waiting else _status(rt, job, msg)

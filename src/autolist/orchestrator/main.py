@@ -32,6 +32,7 @@ PROMPTS_IN_USE = (
     "write_title",
     "write_description",
     "classify_reply",
+    "resolve_cancel",
     "choose_category",
     "image_main",
     "image_lifestyle",
@@ -40,6 +41,8 @@ PROMPTS_IN_USE = (
 )
 REPLIES_IN_USE = (
     "_category_none",
+    "cancel_which",
+    "cancelled_list",
     "_thread_subject",
     "_lifestyle_attached",
     "_lifestyle_none",

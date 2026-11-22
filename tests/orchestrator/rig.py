@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 from PIL import Image
 
+from autolist.agent_runtime.cancel_resolver import ResolvedCancel
 from autolist.agent_runtime.classifier import ClassifiedReply
 from autolist.content.categories import ChosenCategories
 from autolist.content.writer import DescriptionOut, TitleOut
@@ -224,6 +225,7 @@ class FakeLLM:
     def __init__(self, extract: dict[str, Any], *, title: TitleOut = TITLE) -> None:
         self.extract, self.title = extract, title
         self.classify: dict[str, Any] = classified("unclear")
+        self.cancel: dict[str, Any] = {"cancel": False, "products": []}
         self.category: dict[str, Any] = {
             "primary": 11,
             "secondary": None,
@@ -249,6 +251,7 @@ class FakeLLM:
                 json.dumps(self.classify)
             ),
             "choose_category": lambda: ChosenCategories.model_validate(self.category),
+            "resolve_cancel": lambda: ResolvedCancel.model_validate(self.cancel),
         }[req.prompt]()
         return LLMResult(
             parsed=parsed, text=None, model="m", input_tokens=1, output_tokens=1, usd=Decimal(0)

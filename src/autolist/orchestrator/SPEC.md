@@ -154,3 +154,8 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
   - Candidates are earlier jobs with the same store model, newest first, at most 5. They are matched by role, prompt, image model and photo hashes; the photos are re-read from each candidate's source email.
   - "תמונת אווירה" while one is attached makes a new one (`fresh`).
   - The bucket keeps only the publisher's short-lived uploads.
+- **Cancel in free wording (DEV 22.11.2026, `cancel_step.py`):**
+  - A reply that is not an exact command but has a cancel word ("בטל", "ביטול") goes to `resolve_cancel` v1 (classify model).
+  - The model gets the list of every job of the same owner email, with the job of this thread marked. It returns which ones to cancel, or "not a cancel" ("בטל את המבצע", "אל תבטל"). Not a cancel means the reply goes on as before.
+  - Only NEEDS_INFO and AWAITING_APPROVAL jobs are cancelled. One `cancelled_list` answer goes to the thread the owner wrote in, listing every named job with its state. When it is unclear which products are meant, `cancel_which` is sent and nothing is cancelled.
+  - Works in an old receipt thread too. Approval is never resolved this way.
