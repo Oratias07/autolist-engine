@@ -188,3 +188,12 @@ async def test_category_in_a_reply_chooses_again_without_rewriting_the_text() ->
     assert rig.llm.requests[-1].variables["owner_category"] == "ציוד משרדי"
     assert rig.llm.prompts.count("write_title") == 1
     assert rig.mail.sent[-1].variables["category"] == "ציוד משרדי"
+
+
+async def test_unclear_without_a_model_question_still_asks() -> None:
+    """DEV 22.11.2026: reply_unclear always carries a question."""
+    rig = await _ready()
+    await _reply(rig, "אממ", classified("unclear"))
+    msg = rig.mail.sent[-1]
+    assert msg.template == "reply_unclear"
+    assert msg.variables["question"] == "<_unclear_question>"

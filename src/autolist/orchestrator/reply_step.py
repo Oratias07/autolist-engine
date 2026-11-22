@@ -68,6 +68,9 @@ def _job_mail(rt: Runtime, job: Job, msg: ChannelMessage, template: str, **extra
     return saved or job
 
 
+UNCLEAR_QUESTION = "_unclear_question"
+
+
 def _status(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
     send(
         rt,
@@ -295,5 +298,7 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
         # photo, and the owner can still cancel (P1-08: no loop on a plain "כן").
         answered = c.model_copy(update={"facts": [], "unverified_fields": [], "question": ""})
         return await apply_facts(rt, job, msg, answered)
-    _job_mail(rt, job, msg, "reply_unclear", question=c.question)
+    # always a question (DEV 22.11.2026): the model's own, else the store's fallback
+    question = c.question or rt.fragment(UNCLEAR_QUESTION, {})
+    _job_mail(rt, job, msg, "reply_unclear", question=question)
     return {"job_id": job.job_id, "reply": "unclear"}
