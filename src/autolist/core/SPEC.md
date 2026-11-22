@@ -187,9 +187,12 @@ These record how the approved behavior was implemented. No behavior was added.
 - **`job_store.py`:**
   - the `JobStore` protocol, with in-memory and Firestore implementations;
   - the thread index `job_threads`, and the counter `counters/jobs` (starts at `agent.first_job_number`);
+  - a job number is taken by creating `job_numbers/<n>`. A taken number is skipped, so two overlapping calls never share one (L3);
+  - `claim_publish(job_id, at)` creates `publish_claims/<job_id>`. It returns True only once per job (L3);
   - `new_job()`.
 
 **Acceptance:**
 - both stores pass the same tests;
 - final states have no exits;
-- only PUBLISHING reaches SAVED_HIDDEN.
+- only PUBLISHING reaches SAVED_HIDDEN;
+- a second `claim_publish` of a job returns False, and a taken job number is never returned again.

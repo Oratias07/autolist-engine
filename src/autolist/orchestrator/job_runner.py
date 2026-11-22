@@ -118,6 +118,11 @@ async def _run(rt: Runtime, payload: dict[str, Any]) -> dict[str, Any]:
         if job is None or job.state != JobState.PUBLISHING:
             log.warning("stale publish task", extra={"job_id": payload.get("job_id")})
             return {"skipped": True}
+        if not rt.jobs.claim_publish(job.job_id, rt.now()):
+            # a retried task overlapping the attempt it replaces: the POST is never sent twice
+            # (security review 22.11.2026, L3); the developer checks the store by hand
+            alert_developer(rt, job.job_id, "publish_already_claimed", job.state, "-")
+            return {"skipped": True, "reason": "publish_already_claimed"}
         try:
             job = await publish(rt, job)
         except Exception as exc:
