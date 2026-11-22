@@ -127,6 +127,8 @@ def render(desc: DescriptionOut, sections: list[dict[str, Any]]) -> tuple[str, s
             parts.append(f"<p><strong>{e(sec['heading'])}</strong></p><ul>{items}</ul>")
             lines += [sec["heading"], *(f"- {r.label}: {r.value}" for r in desc.specs)]
         elif sid == "benefits":
+            if not desc.benefits:  # no heading over an empty list (DEV 22.11.2026, stage A)
+                continue
             items = "".join(
                 f"<li><strong>{e(b.title)}:</strong> {e(b.sentence.rstrip('.'))}.</li>"
                 for b in desc.benefits

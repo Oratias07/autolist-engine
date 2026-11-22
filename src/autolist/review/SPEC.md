@@ -58,3 +58,4 @@ TBD.
 
 ## Acceptance criteria
 Taken from the phase file in the store repo, then refined here.
+- **Prices shown as money (DEV 22.11.2026, stage A):** `shekels`: 7.90, 1,190, 1,190.50. A value that is not a number is shown as written. This is used for the price and the sale price in the preview.

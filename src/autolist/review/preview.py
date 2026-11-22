@@ -13,6 +13,7 @@ Image rule (DEV, 14.11.2026):
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from autolist.core.facts import store_model
@@ -37,6 +38,19 @@ def _attachment(n: Literal[1, 2], data: bytes) -> Attachment:
     return Attachment(
         filename=IMAGE_NAMES[n], mime_type="image/jpeg", size_bytes=len(data), data=data
     )
+
+
+def shekels(value: str) -> str:
+    """A price as the store shows money: 7.90, 1,190, 1,190.50 (DEV 22.11.2026, stage A).
+
+    A value that is not a number is shown as it is (the preview never guesses)."""
+    try:
+        amount = Decimal(value.replace(",", ""))
+    except InvalidOperation:
+        return value
+    if amount == amount.to_integral_value():
+        return f"{int(amount):,}"
+    return f"{amount:,.2f}"
 
 
 def build_preview(
@@ -102,7 +116,7 @@ def build_preview(
             "product_name": text.title,
             "version": str(version),
             "title": text.title,
-            "price": facts["price"],
+            "price": shekels(facts["price"]),
             "quantity": facts["quantity"],
             "model": facts["model"],
             "category": category,
