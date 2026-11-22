@@ -86,6 +86,10 @@ def _html(body: str, config: EmailChannelConfig) -> str:
 FIND_SENT_WAITS_S = (2.0, 5.0, 10.0)  # Gmail needs a moment to list a sent mail
 
 
+class MetadataUnavailable(RuntimeError):
+    """A mail was sent, but Gmail never answered the read-back of its thread."""
+
+
 class GmailSender:
     """``service`` is a Gmail API client (googleapiclient) authorised as the agent mailbox."""
 
@@ -107,12 +111,16 @@ class GmailSender:
     def deliver(self, msg: OutboundMessage) -> SentMessage:
         """Send, then read back the thread id and the Message-ID header (owner replies quote it)."""
         gmail_id = self.send(msg)
-        meta = (
-            self._service.users()
-            .messages()
-            .get(userId="me", id=gmail_id, format="metadata", metadataHeaders=["Message-ID"])
-            .execute()
-        )
+        meta = self._meta(gmail_id)
+        if meta is None:
+            # sent, but Gmail did not answer the read-back (YTS-1007, 22.11.2026). The mail is
+            # out: when its thread is known, our own Message-ID is enough; never fail a sent mail.
+            if msg.thread_id is None or self._last_rfc is None:
+                raise MetadataUnavailable(f"sent {gmail_id}, but its thread is unknown")
+            log.warning("sent; read-back failed", extra={"template": msg.template})
+            return SentMessage(
+                gmail_id=gmail_id, thread_id=msg.thread_id, rfc_message_id=self._last_rfc
+            )
         headers = {
             h["name"].lower(): h["value"] for h in meta.get("payload", {}).get("headers", [])
         }
@@ -147,6 +155,27 @@ class GmailSender:
             message_id = found
         log.info("mail sent", extra={"template": msg.template, "gmail_id": message_id})
         return message_id
+
+    def _meta(self, gmail_id: str) -> dict[str, Any] | None:
+        for attempt, wait_s in enumerate((0.0, *FIND_SENT_WAITS_S)):
+            if attempt:
+                self._sleep(wait_s)
+            try:
+                res: dict[str, Any] = (
+                    self._service.users()
+                    .messages()
+                    .get(
+                        userId="me",
+                        id=gmail_id,
+                        format="metadata",
+                        metadataHeaders=["Message-ID"],
+                    )
+                    .execute()
+                )
+                return res
+            except (TimeoutError, OSError):
+                continue
+        return None
 
     def _find_sent(self, rfc_id: str) -> str | None:
         for wait_s in FIND_SENT_WAITS_S:

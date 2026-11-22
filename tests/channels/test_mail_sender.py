@@ -147,3 +147,30 @@ def test_a_send_that_timed_out_and_is_not_in_sent_still_fails(
     with pytest.raises(TimeoutError):
         sender.send(_msg())
     assert [c[0] for c in gmail.calls].count("send") == 1
+
+
+def test_a_read_back_that_keeps_timing_out_does_not_fail_a_sent_mail(
+    email_cfg: EmailChannelConfig,
+) -> None:
+    """YTS-1007 (22.11.2026): the preview was sent and the read-back timed out."""
+    gmail = FakeGmail({"send": {"id": "g-1"}, "get": [TimeoutError("timed out")] * 4})
+    sender = GmailSender(gmail, email_cfg, REPLIES, sleep=lambda _s: None)
+    sent = sender.deliver(_msg(thread_id="t-9"))
+    assert (sent.gmail_id, sent.thread_id) == ("g-1", "t-9")
+    assert sent.rfc_message_id.startswith("<")
+    assert [c[0] for c in gmail.calls].count("send") == 1
+
+
+def test_a_read_back_that_recovers_is_used(email_cfg: EmailChannelConfig) -> None:
+    meta = {"threadId": "t-new", "payload": {"headers": [{"name": "Message-ID", "value": "<x@y>"}]}}
+    gmail = FakeGmail({"send": {"id": "g-1"}, "get": [TimeoutError("t"), meta]})
+    sent = GmailSender(gmail, email_cfg, REPLIES, sleep=lambda _s: None).deliver(_msg())
+    assert (sent.thread_id, sent.rfc_message_id) == ("t-new", "<x@y>")
+
+
+def test_a_new_thread_whose_read_back_never_answers_raises(email_cfg: EmailChannelConfig) -> None:
+    from autolist.channels.email.mail_sender import MetadataUnavailable
+
+    gmail = FakeGmail({"send": {"id": "g-1"}, "get": [TimeoutError("t")] * 4})
+    with pytest.raises(MetadataUnavailable):
+        GmailSender(gmail, email_cfg, REPLIES, sleep=lambda _s: None).deliver(_msg())

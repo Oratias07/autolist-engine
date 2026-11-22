@@ -162,3 +162,5 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
 - **Rename from the owner's own text (live 22.11.2026):**
   - The model returned the name without brackets and commas, so the exact title is now read from the reply text. That is the quoted text holding the name's quote, or, without quotation marks, from the quote to the end of its line.
   - Other facts the model read out of the name (a model, a material) are dropped.
+- **Developer alerts never raise (live 22.11.2026):** an alert that cannot be sent is logged as `developer alert not sent`, with the same redacted detail. The real failure stays the one that is raised and logged.
+- **One Gmail client per thread:** httplib2 is not thread-safe, and the push handler and the job steps run in parallel. This is the suspected cause of the 22.11 Gmail timeouts.

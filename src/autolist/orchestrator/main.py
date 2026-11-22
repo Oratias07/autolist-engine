@@ -10,6 +10,7 @@ request that needs it, and ``/health`` reports it, instead of a crash loop at st
 from __future__ import annotations
 
 import os
+import threading
 from datetime import UTC, datetime
 from functools import cache
 from typing import Any
@@ -119,16 +120,24 @@ def firestore() -> Any:  # pragma: no cover - live only
     return fs.Client(project=config().gcp.project_id)
 
 
-@cache
-def gmail() -> Any:  # pragma: no cover - live only
-    from autolist.channels.email.gmail_client import build_service
+_THREAD = threading.local()
 
-    cfg = config()
-    return build_service(
-        get_secret(cfg, "gmail_oauth_client"),
-        get_secret(cfg, "gmail_refresh_token"),
-        cfg.require("channels.email.api_timeout_s"),  # the service never uses the default
-    )
+
+def gmail() -> Any:  # pragma: no cover - live only
+    """One Gmail client per thread: httplib2 is not thread-safe, and the push handler and the
+    job steps run in parallel threads (suspected cause of the 22.11 Gmail timeouts)."""
+    service = getattr(_THREAD, "gmail", None)
+    if service is None:
+        from autolist.channels.email.gmail_client import build_service
+
+        cfg = config()
+        service = build_service(
+            get_secret(cfg, "gmail_oauth_client"),
+            get_secret(cfg, "gmail_refresh_token"),
+            cfg.require("channels.email.api_timeout_s"),  # the service never uses the default
+        )
+        _THREAD.gmail = service
+    return service
 
 
 @cache
