@@ -116,7 +116,7 @@ async def test_sale_not_below_the_price_stops_before_generating() -> None:
     mail = rig.mail.sent[-1]
     assert mail.template == "sale_price_not_below"
     assert (mail.variables["price"], mail.variables["sale_price"]) == ("450", "450")
-    assert job.thread_id == "jt2"  # the mail opened the job's own thread
+    assert job.thread_id == "t0"  # the owner's own thread (DEV 22.11.2026)
 
 
 async def test_no_sale_command_while_waiting_for_info_drops_the_sale_and_goes_on() -> None:

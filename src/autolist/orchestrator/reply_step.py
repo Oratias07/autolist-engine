@@ -194,6 +194,9 @@ def _context(rt: Runtime, job: Job) -> str:
 
 
 async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
+    if msg.rfc_message_id:  # the newest message of the thread: every answer follows it
+        job = job.model_copy(update={"last_rfc_message_id": msg.rfc_message_id})
+        rt.jobs.save(job)
     if job.state in FINAL:
         return _status(rt, job, msg)
     command = parse_command(msg.text, rt.commands)

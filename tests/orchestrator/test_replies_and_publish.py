@@ -63,7 +63,7 @@ async def test_approve_then_publish_hidden_disabled_with_generated_image() -> No
     job = _job(rig)
     assert job.istores_product_id == 970
     done = rig.mail.sent[-1]
-    assert done.template == "saved_hidden" and done.thread_id == "jt2"
+    assert done.template == "saved_hidden" and done.thread_id == "t0"
     assert done.variables["istores_product_id"] == "970" and done.variables["version"] == "1"
     assert rig.blobs.objects == {}  # the uploaded image is deleted after the create
 
@@ -122,7 +122,7 @@ async def test_choose_image_1_makes_version_2_with_both_images() -> None:
     assert v2.title == job.versions[0].title and job.revision_count == 1
     preview = rig.mail.sent[-1]
     assert preview.variables["image_note"] == "<image_note_owner_choice>"
-    assert preview.variables["version"] == "2" and preview.thread_id == "jt2"
+    assert preview.variables["version"] == "2" and preview.thread_id == "t0"
     assert [a.filename for a in preview.attachments] == ["image-1.jpg", "image-2.jpg"]
     # image 2 was read back from the first preview, not generated again
     assert len(rig.images.requests) == 1

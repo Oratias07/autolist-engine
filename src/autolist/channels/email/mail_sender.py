@@ -48,7 +48,7 @@ def build_mime(
     mime = EmailMessage()
     mime["From"] = config.agent_mailbox
     mime["To"] = msg.to
-    mime["Subject"] = reply.subject
+    mime["Subject"] = msg.subject or reply.subject
     if msg.in_reply_to:
         mime["In-Reply-To"] = msg.in_reply_to
         mime["References"] = msg.in_reply_to

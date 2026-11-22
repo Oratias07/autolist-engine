@@ -62,3 +62,23 @@ def store_model(job: Job) -> str | None:
     """What goes in the store's model field: the model, else the item code (DEV 15.11.2026)."""
     fact = job.fact("model") or job.fact("item_code")
     return fact.value if fact else None
+
+
+TITLE_OVERRIDE = "title_override"
+_QUOTES = "\"'״׳“”‘’ "  # noqa: RUF001
+
+
+def owner_title(value: str) -> str:
+    """A name the owner gave in a reply, used exactly as he wrote it (DEV 22.11.2026): only
+    surrounding quotes and spaces are removed, and line breaks become single spaces."""
+    return " ".join(value.split()).strip(_QUOTES).strip()
+
+
+def as_title_override(facts: list[JobFact]) -> list[JobFact]:
+    """In a reply to a preview, a name replaces the written title as is (never rewritten)."""
+    return [
+        f.model_copy(update={"key": TITLE_OVERRIDE, "value": owner_title(f.value)})
+        if f.key == "name" and owner_title(f.value)
+        else f
+        for f in facts
+    ]

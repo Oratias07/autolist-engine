@@ -471,6 +471,8 @@ class Job(_Strict):
     # guarded image list (re-derived from the email when needed; images are not stored)
     printed_text: bool | None = None
     lifestyle_requested: bool = False  # the owner asked for a lifestyle image (DEV 15.11.2026)
+    thread_subject: str | None = None  # every email of the job uses it (DEV 22.11.2026)
+    last_rfc_message_id: str | None = None  # the newest message of the thread, for In-Reply-To
     versions: list[JobVersion] = Field(default_factory=list)
     revision_count: int = Field(default=0, ge=0)
     istores_product_id: int | None = None
@@ -546,6 +548,9 @@ class OutboundMessage(_Strict):
     thread_id: str | None = None
     in_reply_to: str | None = None  # Message-ID of the message being answered
     attachments: list[Attachment] = Field(default_factory=list)
+    # the job thread's fixed subject (DEV 22.11.2026): one subject per thread, so the owner's
+    # Gmail keeps every email of a product in one thread. None: the template's subject.
+    subject: str | None = None
 
 
 class SentMessage(_Strict):

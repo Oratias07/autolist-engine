@@ -56,11 +56,12 @@ async def test_generate_sends_preview_with_generated_image() -> None:
     assert job is not None
     preview = rig.mail.sent[-1]
     assert preview.template == "ready_for_approval"
-    assert preview.thread_id is None  # opens the job's own thread
+    # DEV 22.11.2026: the first product continues in the owner's thread, with one subject
+    assert preview.thread_id == "t0" and preview.subject == "Re: מוצר חדש"
     assert preview.variables["image_note"] == "<image_note_generated>"
     assert preview.variables["price"] == "450"
     assert [a.filename for a in preview.attachments] == ["image-2.jpg"]
-    assert job.thread_id == "jt2" and rig.jobs.by_thread("jt2") == job
+    assert job.thread_id == "t0" and rig.jobs.by_thread("t0") == job
     v = job.versions[0]
     assert (v.number, v.image_choice, v.image_options) == (1, 2, [2])
     assert v.preview_gmail_id == "s2" and v.preview_rfc_message_id == "<s2@example.com>"
@@ -112,8 +113,8 @@ async def test_missing_price_asks_and_generates_nothing() -> None:
     assert job is not None and job.state == S.NEEDS_INFO
     assert rig.mail.templates() == ["received", "needs_info"]
     ask = rig.mail.sent[1]
-    assert ask.thread_id is None and ask.variables["questions_list"] == "1. מחיר"
-    assert job.thread_id == "jt2"
+    assert ask.thread_id == "t0" and ask.variables["questions_list"] == "1. מחיר"
+    assert job.thread_id == "t0"
     assert rig.queue.tasks == []
     assert rig.llm.prompts == ["extract_request"]
     assert rig.images.requests == []
@@ -195,12 +196,11 @@ async def test_duplicate_model_cancels_before_any_paid_text_or_image() -> None:
     assert rig.llm.prompts == ["extract_request"]
 
 
-async def test_reply_in_receipt_thread_points_to_product_threads() -> None:
+async def test_a_reply_in_the_owner_thread_belongs_to_the_first_product() -> None:
     rig = _rig(extraction([item()]))
     await _email(rig)
     rig.messages["g2"] = email("מאשר", thread="t0")
-    assert await _email(rig, "g2") == {"opened": []}
-    assert rig.mail.templates()[-1] == "reply_in_product_thread"
+    assert await _email(rig, "g2") == {"job_id": "T-1", "reply": "status"}  # still generating
     assert rig.llm.prompts == ["extract_request"]  # not extracted again
 
 

@@ -132,3 +132,4 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 
 ## Amendment (2026-11-15, P1-08): the agent's own sent messages
 `email/own_sent.py`: `sent_by_rfc_id` and `sent_by_gmail_id` return the thread and send time of a message only when it is `SENT` from `agent_mailbox`. Only a well-formed Message-ID goes into the Gmail search (`rfc822msgid:… in:sent`). Read-only.
+- `OutboundMessage.subject` (DEV 22.11.2026), when set, replaces the template's subject: the job thread's one fixed subject. It comes from the owner's own subject or the store fragment `_thread_subject`, never from code.

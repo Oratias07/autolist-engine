@@ -141,3 +141,11 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
   - A failure sends `lifestyle_unavailable`, and the preview says "לא נוצרה".
   - On create it goes as `images` (create only, P1-02), and the verifier checks it is on the store CDN.
   - Every uploaded image is deleted after the create.
+- **One thread per product (DEV 22.11.2026):**
+  - The first product of an owner email continues in the owner's own thread, with subject "Re: <his subject>". Every later product opens one thread of its own, with the fixed subject `_thread_subject` ("[job id] product name").
+  - Every email of a job goes in its thread with that subject, and answers the newest message of the thread (`In-Reply-To`): the owner's latest reply, or the agent's last email.
+  - So two products make two threads, also after a clarifying question. A reply in the owner's thread belongs to the first product.
+- **The owner's own name (DEV 22.11.2026):**
+  - A name in a reply to a preview becomes the exact title (`title_override`). Only surrounding quotes are removed, and line breaks become spaces. It is never rewritten or style-checked, so "!" and test markings are his choice.
+  - The name in the first email is still written by `write_title`.
+  - A later rewrite of the text keeps his name.

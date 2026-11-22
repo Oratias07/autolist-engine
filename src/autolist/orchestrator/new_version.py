@@ -11,6 +11,7 @@ from typing import Literal
 
 from autolist.channels.email.mail_sender import MAX_OUT_ATTACHMENT_BYTES
 from autolist.channels.email.own_attachment import fetch_own_attachment
+from autolist.core.facts import TITLE_OVERRIDE
 from autolist.core.models import CategoryChoice, ChannelMessage, Job, JobState, ListingText
 from autolist.core.state_machine import transition
 from autolist.images.postprocess import postprocess
@@ -96,6 +97,9 @@ def new_version(
         open_points=latest.open_points,
         problems=[],
     )
+    override = job.fact(TITLE_OVERRIDE)
+    if override is not None:  # the owner's own name wins over any written title
+        text = text.model_copy(update={"title": override.value})
     number = latest.number + 1
     preview = build_preview(
         job,
