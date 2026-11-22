@@ -135,6 +135,6 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 - `OutboundMessage.subject` (DEV 22.11.2026), when set, replaces the template's subject: the job thread's one fixed subject. It comes from the owner's own subject or the store fragment `_thread_subject`, never from code.
 - **Send timeouts (live 22.11.2026, YTS-1007):**
   - A preview send with images timed out reading Gmail's reply after the mail was sent, and the job failed.
-  - Every mail now carries our own Message-ID. After a timeout the sender looks for it in Sent (2, 5 and 10 s); when found, the send counts as done, and it is never sent twice.
-  - The service builds the Gmail client with `channels.email.api_timeout_s`, required (the library default is 60 s). A warning is logged if Gmail ever replaces our Message-ID.
-- **Read-back after a send (live 22.11.2026):** the metadata read-back is tried four times. If it never answers, a mail sent in a known thread returns its own Message-ID and thread, and a sent mail is never reported as failed. Only a new thread whose id is unknown raises `MetadataUnavailable`.
+  - Every mail now carries our own send id (`X-Autolist-Send-Id`; Gmail replaces the Message-ID, observed in the 22.11 alert test). After a timeout the sender looks it up in the newest mail sent to the same recipient (2, 5 and 10 s). When found, the send counts as done, and it is never sent twice.
+  - The service builds the Gmail client with `channels.email.api_timeout_s`, required (the library default is 60 s).
+- **Read-back after a send (live 22.11.2026):** the metadata read-back is tried four times. If it never answers, a mail sent in a known thread returns its thread with an unknown Message-ID (""), and a sent mail is never reported as failed. Only a new thread whose id is unknown raises `MetadataUnavailable`.

@@ -1,8 +1,9 @@
 """Send one test developer alert through the real sender (thin CLI; DEV request 22.11.2026).
 
 Proves the alert path end to end: template, the sender's recipient allowlist (the developer is
-the only extra recipient), Gmail delivery, and that Gmail keeps our own Message-ID (the send
-timeout recovery depends on it). No paid calls, no store access.
+the only extra recipient), Gmail delivery, and that Gmail keeps our send id header (the send
+timeout recovery depends on it; Gmail replaces the Message-ID, observed 22.11.2026).
+No paid calls, no store access.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from autolist.channels.email.gmail_client import build_service
-from autolist.channels.email.mail_sender import GmailSender
+from autolist.channels.email.mail_sender import SEND_ID_HEADER, GmailSender
 from autolist.core.config import get_secret, load_store_config
 from autolist.core.logging import configure_logging
 from autolist.core.models import OutboundMessage
@@ -45,14 +46,20 @@ def main() -> None:
             },
         )
     )
-    kept = sent.rfc_message_id.endswith(
-        "@" + cfg.channels.email.agent_mailbox.rsplit("@", 1)[-1] + ">"
+    meta = (
+        service.users()
+        .messages()
+        .get(userId="me", id=sent.gmail_id, format="metadata", metadataHeaders=[SEND_ID_HEADER])
+        .execute()
+    )
+    kept = any(
+        h["name"].lower() == SEND_ID_HEADER.lower() for h in meta["payload"].get("headers", [])
     )
     lines = [
         f"# developer alert test - {stamp}",
         "",
         f"- sent to the developer contact: gmail id {sent.gmail_id}",
-        f"- Gmail kept our own Message-ID: {kept}",
+        f"- Gmail kept our send id header ({SEND_ID_HEADER}): {kept}",
     ]
     out = args.out / "docs" / "live-runs" / f"{stamp}-alert-test.md"
     out.parent.mkdir(parents=True, exist_ok=True)
