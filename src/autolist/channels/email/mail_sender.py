@@ -11,13 +11,12 @@ from __future__ import annotations
 import base64
 import html
 import time
+import uuid
 from collections.abc import Callable
 from email.message import EmailMessage
-from email.utils import make_msgid
 from pathlib import Path
 from typing import Any
 
-from autolist.channels.email.own_sent import sent_by_rfc_id
 from autolist.channels.errors import AttachmentRejected, RecipientNotAllowed
 from autolist.channels.templates import render_reply
 from autolist.core.logging import get_logger
@@ -53,8 +52,9 @@ def build_mime(
     mime["From"] = config.agent_mailbox
     mime["To"] = msg.to
     mime["Subject"] = msg.subject or reply.subject
-    # our own Message-ID: after a send timeout the sent mail is found by it (live 22.11.2026)
-    mime["Message-ID"] = make_msgid(domain=config.agent_mailbox.rsplit("@", 1)[-1])
+    # our own send id: after a send timeout the sent mail is found by it (live 22.11.2026).
+    # Not the Message-ID: Gmail replaces that one (observed, alert test 22.11.2026).
+    mime[SEND_ID_HEADER] = uuid.uuid4().hex
     if msg.in_reply_to:
         mime["In-Reply-To"] = msg.in_reply_to
         mime["References"] = msg.in_reply_to
@@ -83,6 +83,7 @@ def _html(body: str, config: EmailChannelConfig) -> str:
     )
 
 
+SEND_ID_HEADER = "X-Autolist-Send-Id"
 FIND_SENT_WAITS_S = (2.0, 5.0, 10.0)  # Gmail needs a moment to list a sent mail
 
 
@@ -106,7 +107,6 @@ class GmailSender:
         self._templates_dir = templates_dir
         self._extra = extra_recipients
         self._sleep = sleep
-        self._last_rfc: str | None = None
 
     def deliver(self, msg: OutboundMessage) -> SentMessage:
         """Send, then read back the thread id and the Message-ID header (owner replies quote it)."""
@@ -114,19 +114,15 @@ class GmailSender:
         meta = self._meta(gmail_id)
         if meta is None:
             # sent, but Gmail did not answer the read-back (YTS-1007, 22.11.2026). The mail is
-            # out: when its thread is known, our own Message-ID is enough; never fail a sent mail.
-            if msg.thread_id is None or self._last_rfc is None:
+            # out: when its thread is known, never fail a sent mail. Its Message-ID stays
+            # unknown (""), so the next email answers the owner's message instead.
+            if msg.thread_id is None:
                 raise MetadataUnavailable(f"sent {gmail_id}, but its thread is unknown")
             log.warning("sent; read-back failed", extra={"template": msg.template})
-            return SentMessage(
-                gmail_id=gmail_id, thread_id=msg.thread_id, rfc_message_id=self._last_rfc
-            )
+            return SentMessage(gmail_id=gmail_id, thread_id=msg.thread_id, rfc_message_id="")
         headers = {
             h["name"].lower(): h["value"] for h in meta.get("payload", {}).get("headers", [])
         }
-        if headers.get("message-id") != self._last_rfc:
-            # the timeout recovery finds a mail by our Message-ID: watch that Gmail keeps it
-            log.warning("gmail replaced our Message-ID", extra={"template": msg.template})
         return SentMessage(
             gmail_id=gmail_id,
             thread_id=str(meta["threadId"]),
@@ -135,7 +131,7 @@ class GmailSender:
 
     def send(self, msg: OutboundMessage) -> str:
         mime = build_mime(msg, self._config, self._templates_dir, self._extra)
-        self._last_rfc = str(mime["Message-ID"])
+        send_id = str(mime[SEND_ID_HEADER])
         body: dict[str, str] = {"raw": base64.urlsafe_b64encode(mime.as_bytes()).decode()}
         if msg.thread_id:
             body["threadId"] = msg.thread_id
@@ -145,7 +141,7 @@ class GmailSender:
         except (TimeoutError, OSError) as exc:
             # the reply timed out, but the mail may well be sent (YTS-1007, 22.11.2026). Never
             # send twice: look for it in Sent by its Message-ID; only if it is not there, fail.
-            found = self._find_sent(str(mime["Message-ID"]))
+            found = self._find_sent(send_id, msg.to)
             if found is None:
                 raise
             log.warning(
@@ -177,10 +173,35 @@ class GmailSender:
                 continue
         return None
 
-    def _find_sent(self, rfc_id: str) -> str | None:
+    def _find_sent(self, send_id: str, to: str) -> str | None:
+        """The sent mail with our send id, among the newest sent to the same recipient."""
         for wait_s in FIND_SENT_WAITS_S:
             self._sleep(wait_s)
-            info = sent_by_rfc_id(self._service, rfc_id, config=self._config)
-            if info is not None:
-                return info.gmail_id
+            try:
+                found = (
+                    self._service.users()
+                    .messages()
+                    .list(userId="me", q=f"in:sent to:{to} newer_than:1d", maxResults=10)
+                    .execute()
+                )
+                for m in found.get("messages", []) or []:
+                    meta = (
+                        self._service.users()
+                        .messages()
+                        .get(
+                            userId="me",
+                            id=str(m["id"]),
+                            format="metadata",
+                            metadataHeaders=[SEND_ID_HEADER],
+                        )
+                        .execute()
+                    )
+                    headers = meta.get("payload", {}).get("headers", [])
+                    if any(
+                        h["name"].lower() == SEND_ID_HEADER.lower() and h["value"] == send_id
+                        for h in headers
+                    ):
+                        return str(m["id"])
+            except (TimeoutError, OSError):
+                continue
         return None

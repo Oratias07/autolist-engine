@@ -104,30 +104,30 @@ def test_a_thread_subject_replaces_the_template_subject(email_cfg: EmailChannelC
     assert build_mime(_msg(), email_cfg, REPLIES)["Subject"] != "Re: 2 מוצרים"
 
 
-def _sent_meta(cfg: EmailChannelConfig) -> dict[str, object]:
-    return {
-        "id": "g-found",
-        "threadId": "t1",
-        "internalDate": "1000",
-        "labelIds": ["SENT"],
-        "payload": {"headers": [{"name": "From", "value": cfg.agent_mailbox}]},
-    }
+class _FixedId:
+    hex = "send-id-1"
 
 
-def test_every_mail_carries_our_own_message_id(email_cfg: EmailChannelConfig) -> None:
+def _meta_with(send_id: str) -> dict[str, object]:
+    return {"payload": {"headers": [{"name": "X-Autolist-Send-Id", "value": send_id}]}}
+
+
+def test_every_mail_carries_a_send_id(email_cfg: EmailChannelConfig) -> None:
     mime = build_mime(_msg(), email_cfg, REPLIES)
-    assert str(mime["Message-ID"]).startswith("<") and str(mime["Message-ID"]).endswith(">")
+    assert len(str(mime["X-Autolist-Send-Id"])) == 32
 
 
 def test_a_send_that_timed_out_but_was_sent_is_found_and_never_sent_twice(
-    email_cfg: EmailChannelConfig,
+    email_cfg: EmailChannelConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """YTS-1007 (22.11.2026): the preview was sent, the reply timed out, the job failed."""
+    """YTS-1007 (22.11.2026). Gmail replaces the Message-ID (alert test 22.11), so the mail
+    is found by our own send id among the newest sent to the same recipient."""
+    monkeypatch.setattr("autolist.channels.email.mail_sender.uuid.uuid4", lambda: _FixedId)
     gmail = FakeGmail(
         {
             "send": [TimeoutError("The read operation timed out")],
-            "history.list": [{"messages": []}, {"messages": [{"id": "g-found"}]}],
-            "get": [_sent_meta(email_cfg)],
+            "history.list": [{"messages": []}, {"messages": [{"id": "g-x"}, {"id": "g-found"}]}],
+            "get": [_meta_with("other"), _meta_with("send-id-1")],
         }
     )
     waits: list[float] = []
@@ -136,7 +136,7 @@ def test_a_send_that_timed_out_but_was_sent_is_found_and_never_sent_twice(
     assert [c[0] for c in gmail.calls].count("send") == 1
     assert waits == [2.0, 5.0]
     query = next(kw["q"] for name, kw in gmail.calls if name == "history.list")
-    assert query.startswith("rfc822msgid:") and query.endswith(" in:sent")
+    assert query == "in:sent to:owner@example.com newer_than:1d"
 
 
 def test_a_send_that_timed_out_and_is_not_in_sent_still_fails(
@@ -156,8 +156,7 @@ def test_a_read_back_that_keeps_timing_out_does_not_fail_a_sent_mail(
     gmail = FakeGmail({"send": {"id": "g-1"}, "get": [TimeoutError("timed out")] * 4})
     sender = GmailSender(gmail, email_cfg, REPLIES, sleep=lambda _s: None)
     sent = sender.deliver(_msg(thread_id="t-9"))
-    assert (sent.gmail_id, sent.thread_id) == ("g-1", "t-9")
-    assert sent.rfc_message_id.startswith("<")
+    assert (sent.gmail_id, sent.thread_id, sent.rfc_message_id) == ("g-1", "t-9", "")
     assert [c[0] for c in gmail.calls].count("send") == 1
 
 
