@@ -2,7 +2,8 @@
 
 Proves the alert path end to end: template, the sender's recipient allowlist (the developer is
 the only extra recipient), Gmail delivery, and that Gmail keeps our send id header (the send
-timeout recovery depends on it; Gmail replaces the Message-ID, observed 22.11.2026). No paid calls, no store access.
+timeout recovery depends on it; Gmail replaces the Message-ID, observed 22.11.2026).
+No paid calls, no store access.
 """
 
 from __future__ import annotations
