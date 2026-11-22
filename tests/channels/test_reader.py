@@ -200,3 +200,23 @@ def test_line_starting_like_a_header_without_its_end_is_kept() -> None:
 def test_content_ending_with_a_colon_is_not_a_header() -> None:
     text = "מאשר\nבתאריך 20.11 מאת הספק יגיעו:\n- המחיר 480"
     assert strip_quoted(text) == text
+
+
+def test_signature_block_is_read_up_to_the_quote_header() -> None:
+    from autolist.channels.email.reader import signature_block
+
+    text = "מאשר\n-- \nרגע, לא\n\nOn Sun, 22 Nov 2026, a@example.com wrote:\n> old"
+    assert signature_block(text) == "רגע, לא"
+    assert signature_block("מאשר") == ""
+    assert signature_block("מאשר\nOn Sun, a@example.com wrote:\n-- \nx") == ""
+
+
+def test_html_after_a_closed_quote_is_read_again() -> None:
+    """Security review 22.11.2026 (L5): text after </blockquote> is not dropped."""
+    from autolist.channels.email.reader import html_to_text
+
+    html = "<div>לפני</div><blockquote><p>ישן</p></blockquote><div>אחרי</div>"
+    text = html_to_text(html)
+    assert "לפני" in text and "אחרי" in text and "ישן" not in text
+    nested = '<div class="gmail_quote"><div>ישן <b>מודגש</b></div></div><p>חדש</p>'
+    assert "חדש" in html_to_text(nested) and "ישן" not in html_to_text(nested)

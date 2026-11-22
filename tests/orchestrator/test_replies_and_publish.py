@@ -259,3 +259,20 @@ async def test_no_category_shows_the_none_fragment_and_sends_none() -> None:
     await _reply(rig, "מאשר")
     await _publish(rig)
     assert rig.posted is not None and "product_category" not in rig.posted
+
+
+async def test_approve_followed_by_text_after_a_signature_line_is_not_an_approval() -> None:
+    """Security review 22.11.2026 (L5): "מאשר", "-- ", "רגע, לא" must not approve."""
+    rig = await _ready()
+    out = await _reply(rig, "מאשר\n-- \nרגע, לא")
+    assert out["reply"] == "approve_with_text"
+    assert rig.jobs.get("T-1").state == S.AWAITING_APPROVAL  # type: ignore[union-attr]
+
+
+async def test_approve_with_the_owner_usual_signature_still_approves() -> None:
+    rig = Rig(extraction([item()]))
+    rig.messages["g1"] = email(EMAIL_TEXT + "\n-- \nYTS-SIG www.example.com")
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
+    out = await _reply(rig, "מאשר\n-- \nYTS-SIG www.example.com")
+    assert out["reply"] == "approved"

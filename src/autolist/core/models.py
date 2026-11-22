@@ -542,6 +542,7 @@ class ChannelMessage(_Strict):
     attachments: list[Attachment] = Field(default_factory=list)
     rfc_message_id: str | None = None  # this message's Message-ID header
     in_reply_to: str | None = None  # the In-Reply-To header: which agent email it answers
+    signature: str = ""  # the text after the "-- " line (reader.signature_block), normalised
 
 
 class OutboundMessage(_Strict):
