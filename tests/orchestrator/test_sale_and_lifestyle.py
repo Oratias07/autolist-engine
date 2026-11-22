@@ -53,7 +53,9 @@ async def _approve_and_publish(rig: Rig) -> dict[str, Any]:
     await run_task(rig.rt, {"event": "publish", "job_id": "T-1"})
     assert _job(rig).state == S.SAVED_HIDDEN
     assert rig.posted is not None
-    assert rig.blobs.objects == {}  # every uploaded image is deleted after the create
+    assert not [
+        n for n in rig.blobs.objects if not n.startswith("image-reuse/")
+    ]  # every uploaded image is deleted after the create
     return rig.posted
 
 

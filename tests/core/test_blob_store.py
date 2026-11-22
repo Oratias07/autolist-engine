@@ -45,6 +45,12 @@ class FakeBlob:
     def delete(self) -> None:
         self.log.append(("delete", self.name))
 
+    def exists(self) -> bool:
+        return self.name == "there.jpg"
+
+    def download_as_bytes(self) -> bytes:
+        return b"bytes"
+
 
 class FakeClient:
     def __init__(self) -> None:
@@ -101,3 +107,12 @@ def test_gcs_refuses_other_bucket_and_long_ttl() -> None:
     mine = ImageRef(bucket="refs", name="a.jpg", content_type="image/jpeg")
     with pytest.raises(ValueError, match="ttl"):
         store.signed_url(mine, 7200)
+
+
+def test_gcs_get_returns_bytes_or_none() -> None:
+    store = GcsBlobStore(_cfg("b"), client=FakeClient(), credentials=TokenCreds())
+    assert store.get("there.jpg") == b"bytes"
+    assert store.get("gone.jpg") is None
+    mem = InMemoryBlobStore()
+    mem.put("a.jpg", b"x", "image/jpeg")
+    assert (mem.get("a.jpg"), mem.get("b.jpg")) == (b"x", None)
