@@ -149,8 +149,8 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
   - A name in a reply to a preview becomes the exact title (`title_override`). Only surrounding quotes are removed, and line breaks become spaces. It is never rewritten or style-checked, so "!" and test markings are his choice.
   - The name in the first email is still written by `write_title`.
   - A later rewrite of the text keeps his name.
-- **Image reuse (DEV 22.11.2026, `image_reuse.py`):**
-  - A generated image (main or lifestyle) is kept in the reference bucket under a key made of the role, the prompt name, the image model and the photos' hashes. The product facts are not in the key.
-  - The same photos get the same image for as long as the bucket keeps objects (one day), without a new paid call.
-  - A cancelled job keeps the images of its latest preview the same way, taken back from that preview email.
-  - A storage error never stops a job: it only costs a new image.
+- **Image reuse changed (DEV 22.11.2026): nothing is stored.**
+  - The earlier image comes back from the earlier job's own preview email (`image-2.jpg`, `image-3.jpg`).
+  - Candidates are earlier jobs with the same store model, newest first, at most 5. They are matched by role, prompt, image model and photo hashes; the photos are re-read from each candidate's source email.
+  - "תמונת אווירה" while one is attached makes a new one (`fresh`).
+  - The bucket keeps only the publisher's short-lived uploads.

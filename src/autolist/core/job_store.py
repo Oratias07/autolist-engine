@@ -20,6 +20,7 @@ class JobStore(Protocol):
     def by_thread(self, thread_id: str) -> Job | None: ...
     def open_jobs(self) -> list[Job]: ...
     def by_source_thread(self, thread_id: str) -> list[Job]: ...
+    def all_jobs(self) -> list[Job]: ...
 
 
 class InMemoryJobStore:
@@ -50,6 +51,9 @@ class InMemoryJobStore:
     def by_source_thread(self, thread_id: str) -> list[Job]:
         jobs = [j for j in self.jobs.values() if j.source_thread_id == thread_id]
         return sorted(jobs, key=lambda j: j.number)
+
+    def all_jobs(self) -> list[Job]:
+        return list(self.jobs.values())
 
 
 class FirestoreJobStore:
@@ -86,6 +90,9 @@ class FirestoreJobStore:
     def by_source_thread(self, thread_id: str) -> list[Job]:
         jobs = [j for j in self._all() if j.source_thread_id == thread_id]
         return sorted(jobs, key=lambda j: j.number)
+
+    def all_jobs(self) -> list[Job]:
+        return self._all()
 
     def _all(self) -> list[Job]:
         # a full scan: the fast track has few jobs, and it needs no composite index

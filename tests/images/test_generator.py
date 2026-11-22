@@ -18,7 +18,7 @@ from PIL import Image
 
 from autolist.core.config import parse_store_config
 from autolist.core.cost_ledger import CostLedger, InMemoryLedgerStore
-from autolist.core.errors import ConfigInvalid, CostCapExceeded
+from autolist.core.errors import ConfigInvalid, ConfigMissing, CostCapExceeded
 from autolist.core.models import CostEntry, ImageRequest, ReferenceImage, StoreConfig
 from autolist.images.errors import (
     BillingRequired,
@@ -40,7 +40,11 @@ def _png(w: int = 64, h: int = 64) -> bytes:
     return buf.getvalue()
 
 
-def _ok(prompt_tokens: int | None = 2000, image: bool = True) -> httpx.Response:
+def _ok(
+    prompt_tokens: int | None = 2000,
+    image: bool = True,
+    usage: dict[str, Any] | None = None,
+) -> httpx.Response:
     parts: list[dict[str, Any]] = [{"text": "here you go"}]
     if image:
         b64 = base64.b64encode(_png(32, 32)).decode()
@@ -49,7 +53,12 @@ def _ok(prompt_tokens: int | None = 2000, image: bool = True) -> httpx.Response:
         "candidates": [{"content": {"parts": parts, "role": "model"}, "finishReason": "STOP"}]
     }
     if prompt_tokens is not None:
-        body["usageMetadata"] = {"promptTokenCount": prompt_tokens, "candidatesTokenCount": 1}
+        # the shape observed in P0-10 (usageMetadata keys)
+        body["usageMetadata"] = usage or {
+            "promptTokenCount": prompt_tokens,
+            "candidatesTokenCount": 1120,
+            "candidatesTokensDetails": [{"modality": "IMAGE", "tokenCount": 1120}],
+        }
     return httpx.Response(200, json=body)
 
 
@@ -253,3 +262,39 @@ def test_shape_has_no_image_bytes(prompts: Path) -> None:
     shape = json.dumps(rig.gen.last_shape)
     assert "inlineData" in shape
     assert base64.b64encode(_png(32, 32)).decode()[:20] not in shape
+
+
+def test_thinking_and_text_output_are_charged_apart_from_the_image(prompts: Path) -> None:
+    """#31 (DEV 22.11.2026): thoughtsTokenCount and TEXT candidates are billed as text."""
+    usage = {
+        "promptTokenCount": 2000,
+        "candidatesTokenCount": 1130,
+        "candidatesTokensDetails": [
+            {"modality": "IMAGE", "tokenCount": 1120},
+            {"modality": "TEXT", "tokenCount": 10},
+        ],
+        "thoughtsTokenCount": 300,
+    }
+    rig = Rig(prompts, [_ok(usage=usage)])
+    out = rig.gen.generate(_req())
+    want = Decimal("0.05") + Decimal("1.00") * 2000 / 1_000_000 + Decimal("10.00") * 310 / 1_000_000
+    assert out.usd == want and out.estimated_cost is False
+    assert rig.ledger.month_summary(NOW).by_category["image"] == want
+
+
+def test_without_modality_detail_the_whole_output_is_an_estimated_upper_bound(
+    prompts: Path,
+) -> None:
+    usage = {"promptTokenCount": 2000, "candidatesTokenCount": 1200, "thoughtsTokenCount": 100}
+    out = Rig(prompts, [_ok(usage=usage)]).gen.generate(_req())
+    assert out.usd == Decimal("0.05") + Decimal("0.002") + Decimal("10.00") * 1300 / 1_000_000
+    assert out.estimated_cost is True
+
+
+def test_no_text_output_price_refuses_before_any_call(prompts: Path) -> None:
+    data = copy.deepcopy(VALID_STORE)
+    data["images"]["prices"][MODEL].pop("text_output_usd_per_mtok")
+    rig = Rig(prompts, [_ok()], cfg=parse_store_config(data))
+    with pytest.raises(ConfigMissing, match="text_output_usd_per_mtok"):
+        rig.gen.generate(_req())
+    assert rig.calls == []

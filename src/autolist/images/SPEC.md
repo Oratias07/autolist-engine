@@ -124,3 +124,8 @@ The API key is read with `core.config.get_secret(cfg, "gemini_api_key")` and sen
   - The documented `inlineData` path is confirmed.
 - **Output size:** `imageSize: "2K"` returns 2048×2048 for both candidates.
 - **Thinking tokens:** both models report `thoughtsTokenCount`. The ledger records the per-image price plus input tokens only, so thinking tokens are not counted. The comparison with the provider's balance is open question #31 in the store repo. If they are billed, the cost formula changes in the same PR as this SPEC.
+
+## Amendment (2026-11-22, DEV, open question #31)
+- The image models bill thinking (`thoughtsTokenCount`) and text output (`candidatesTokensDetails` with modality TEXT) apart from the image, at the text output rate. Both fields were observed in the P0-10 response shape.
+- The ledger now adds them at `images.prices.<model>.text_output_usd_per_mtok`. Without per-modality detail, the whole candidate count is charged at that rate and recorded as estimated (an upper bound).
+- A model without that price is refused before any call (`ConfigMissing`).

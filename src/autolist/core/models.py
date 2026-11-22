@@ -116,6 +116,9 @@ class ImageModelPrices(_Strict):
 
     input_usd_per_mtok: Decimal = Field(ge=0)
     per_image_usd: dict[str, Decimal]  # output image size label ("1K", "2K") -> USD
+    # text and thinking output (thoughtsTokenCount, TEXT candidates), billed apart from the
+    # image (#31, DEV 22.11.2026). None: a response that has them raises ConfigMissing.
+    text_output_usd_per_mtok: Decimal | None = Field(default=None, ge=0)
 
 
 class ImagesConfig(_Strict):

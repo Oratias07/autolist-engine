@@ -110,19 +110,17 @@ async def test_the_22_11_session_in_two_threads() -> None:
 
 
 async def test_cancelled_products_sent_again_reuse_their_images() -> None:
-    """DEV 22.11.2026: cancel both, send the same email again, pay no image twice."""
+    """DEV 22.11.2026: cancel both, send the same email again: the images come back from the
+    earlier preview emails, nothing is stored, and no image is paid twice."""
     rig = Rig(extraction([CHAIR_1, CHAIR_2]))
     rig.messages["g1"] = email(TEXT, photos=2, subject="2 מוצרים")
     await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
     for job_id in ("T-1", "T-2"):
         await run_task(rig.rt, {"event": "generate", "job_id": job_id})
     paid = len(rig.images.requests)
-    # images made before reuse existed: only the previews have them
-    for name in [n for n in rig.blobs.objects if n.startswith("image-reuse/")]:
-        del rig.blobs.objects[name]
     for job_id in ("T-1", "T-2"):
         assert (await _reply(rig, job_id, "בטל"))["reply"] == "cancelled"
-    assert len([n for n in rig.blobs.objects if n.startswith("image-reuse/")]) == 3
+    assert not rig.blobs.objects  # nothing stored: the images stay in the preview emails
 
     rig.messages["g9"] = email(TEXT, photos=2, subject="2 מוצרים שוב", thread="t9")
     out = await run_task(rig.rt, {"event": "email_received", "gmail_id": "g9"})
@@ -143,3 +141,13 @@ async def test_different_photos_are_never_given_a_reused_image() -> None:
     await run_task(rig.rt, {"event": "email_received", "gmail_id": "g2"})
     await run_task(rig.rt, {"event": "generate", "job_id": "T-2"})
     assert len(rig.images.requests) == 2
+
+
+async def test_asking_again_for_a_lifestyle_image_makes_a_new_one() -> None:
+    rig = Rig(extraction([CHAIR_2]))
+    rig.messages["g1"] = email(TEXT, photos=2)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
+    made = len(rig.images.requests)
+    assert (await _reply(rig, "T-1", "תמונת אווירה"))["reply"] == "lifestyle_added"
+    assert len(rig.images.requests) == made + 1  # the owner asked for another one

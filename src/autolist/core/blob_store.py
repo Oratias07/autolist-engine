@@ -22,8 +22,6 @@ class BlobStore(Protocol):
 
     def delete(self, ref: ImageRef) -> None: ...
 
-    def get(self, name: str) -> bytes | None: ...
-
 
 def _check_ttl(ttl_s: int) -> None:
     if not 0 < ttl_s <= MAX_TTL_S:
@@ -49,9 +47,6 @@ class InMemoryBlobStore:
 
     def delete(self, ref: ImageRef) -> None:
         self.objects.pop(ref.name, None)
-
-    def get(self, name: str) -> bytes | None:
-        return self.objects.get(name)
 
 
 class GcsBlobStore:
@@ -101,11 +96,3 @@ class GcsBlobStore:
 
     def delete(self, ref: ImageRef) -> None:
         self._client.bucket(self._bucket_name).blob(ref.name).delete()
-
-    def get(self, name: str) -> bytes | None:
-        """The object's bytes, or None when it does not exist (or the bucket rule deleted it)."""
-        blob = self._client.bucket(self._bucket_name).blob(name)
-        if not blob.exists():
-            return None
-        data: bytes = blob.download_as_bytes()
-        return data
