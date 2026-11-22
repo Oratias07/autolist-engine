@@ -340,3 +340,21 @@ async def test_neither_model_nor_item_code_asks_once_for_either() -> None:
     rig.messages["g1"] = email(EMAIL_TEXT)
     await _email(rig)
     assert rig.mail.sent[1].variables["questions_list"] == "1. model-or-item-code-label"
+
+
+async def test_an_alert_that_cannot_be_sent_never_hides_the_real_failure() -> None:
+    """Live 22.11.2026: the developer alert timed out after the owner's failure email, and its
+    error replaced the real one. The alert is now logged instead, and the job still fails
+    with its own reason."""
+    from autolist.orchestrator.runtime import alert_developer
+
+    rig = _rig(extraction([item()]))
+    rig.mail.fail_on = "developer_alert"
+    alert_developer(rig.rt, "T-1", "failed", "FAILED", "the real reason")  # does not raise
+    await _email(rig)
+    rig.llm.title = rig.llm.title.model_copy(update={"title": "כיסא משרדי C1!"})
+    with pytest.raises(RuntimeError, match="text checks failed"):
+        await _generate(rig)
+    job = rig.jobs.get("T-1")
+    assert job is not None and job.state == S.FAILED
+    assert rig.mail.templates()[-1] == "failed"

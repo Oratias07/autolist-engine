@@ -17,7 +17,7 @@ from autolist.channels.templates import render_fragment
 from autolist.core.blob_store import BlobStore
 from autolist.core.cost_ledger import CostLedger
 from autolist.core.job_store import JobStore
-from autolist.core.logging import redact_text
+from autolist.core.logging import get_logger, redact_text
 from autolist.core.models import Job, OutboundMessage, SentMessage, StoreConfig
 from autolist.core.sale import sale_spec
 from autolist.images.generator import ImageGenerator
@@ -30,6 +30,9 @@ JOB_TASK_PATH = "/tasks/job"
 
 class Mailer(Protocol):
     def deliver(self, msg: OutboundMessage) -> SentMessage: ...
+
+
+log = get_logger(__name__)
 
 
 @dataclass
@@ -193,11 +196,30 @@ def to_owner(
 
 
 def alert_developer(rt: Runtime, job_id: str, kind: str, state: str, detail: str) -> None:
-    """The detail is an error text: redacted like a log line (registered secrets, tokens)."""
-    rt.mail.deliver(
-        to_owner(
-            "developer_alert",
-            {"job_id": job_id, "kind": kind, "state": state, "detail": redact_text(detail)[:2000]},
-            to=rt.developer,
+    """The detail is an error text: redacted like a log line (registered secrets, tokens).
+
+    Never raises: an alert that cannot be sent is logged as an error with the same detail, and
+    the step that called it goes on (live 22.11.2026: a timed-out alert hid the real failure)."""
+    try:
+        rt.mail.deliver(
+            to_owner(
+                "developer_alert",
+                {
+                    "job_id": job_id,
+                    "kind": kind,
+                    "state": state,
+                    "detail": redact_text(detail)[:2000],
+                },
+                to=rt.developer,
+            )
         )
-    )
+    except Exception as exc:
+        log.error(
+            "developer alert not sent",
+            extra={
+                "job_id": job_id,
+                "kind": kind,
+                "detail": redact_text(detail)[:2000],
+                "error": repr(exc)[:300],
+            },
+        )
