@@ -72,7 +72,7 @@ class EmailChannelConfig(_Strict):
     text_direction: Literal["rtl", "ltr"]
     language: str  # BCP 47 tag for the HTML part, e.g. "he"
     # Gmail API read timeout. The library default (60 s) cut a preview send with images
-    # (live 22.11.2026, YTS-1007). None: the library default (live runs that send no images).
+    # (live 22.11.2026, JOB-1007). None: the library default (live runs that send no images).
     api_timeout_s: int | None = Field(default=None, gt=0)
 
 
@@ -153,8 +153,9 @@ class AgentConfig(_Strict):
     reminder_after_days: int = Field(gt=0)
     expire_after_days: int = Field(gt=0)
     approval_token_ttl_hours: int = Field(gt=0)
-    job_id_prefix: str = Field(min_length=1)  # e.g. "YTS-"
+    job_id_prefix: str = Field(min_length=1)  # e.g. "JOB-"
     max_products_per_email: int = Field(gt=0)
+    max_agent_emails_per_thread: int = Field(gt=0)  # security review M1, 22.11.2026
     first_job_number: int = Field(gt=0)
     job_step_timeout_s: int = Field(gt=0, le=3000)  # active work limit per job step
     developer_contact: str | None  # shown to the owner in receipts; gets failure alerts
@@ -461,7 +462,7 @@ class ReplyClassification(_Strict):
 
 
 class Job(_Strict):
-    job_id: str  # e.g. "YTS-1001"
+    job_id: str  # e.g. "JOB-1001"
     number: int = Field(gt=0)
     state: JobState
     source_gmail_id: str  # the owner's email that opened the job
@@ -542,6 +543,7 @@ class ChannelMessage(_Strict):
     attachments: list[Attachment] = Field(default_factory=list)
     rfc_message_id: str | None = None  # this message's Message-ID header
     in_reply_to: str | None = None  # the In-Reply-To header: which agent email it answers
+    signature: str = ""  # the text after the "-- " line (reader.signature_block), normalised
 
 
 class OutboundMessage(_Strict):

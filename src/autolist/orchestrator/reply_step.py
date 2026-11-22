@@ -31,6 +31,7 @@ from autolist.orchestrator.generate_step import (
     lifestyle_failed,
     lifestyle_image,
 )
+from autolist.orchestrator.intake_step import read
 from autolist.orchestrator.new_version import limit_reached, new_version
 from autolist.orchestrator.reply_facts import apply_facts, missing_required
 from autolist.orchestrator.runtime import (
@@ -69,6 +70,13 @@ def _job_mail(rt: Runtime, job: Job, msg: ChannelMessage, template: str, **extra
 
 
 UNCLEAR_QUESTION = "_unclear_question"
+
+
+def _known_signature(rt: Runtime, job: Job, msg: ChannelMessage) -> bool:
+    """No text after a "-- " line, or the same signature as in the owner's first email."""
+    if not msg.signature:
+        return True
+    return read(rt, job.source_gmail_id).signature == msg.signature
 
 
 def _status(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]:
@@ -216,7 +224,14 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
         return _status(rt, job, msg)
     waiting = job.state == JobState.AWAITING_APPROVAL
     if command == "approve":
-        return _approve(rt, job, msg) if waiting else _status(rt, job, msg)
+        if not waiting:
+            return _status(rt, job, msg)
+        if not _known_signature(rt, job, msg):
+            # "מאשר", then "-- " and more text: something was written after the word
+            # (security review 22.11.2026, L5). Never a clean approval.
+            _job_mail(rt, job, msg, "approve_with_text", version=str(job.versions[-1].number))
+            return {"job_id": job.job_id, "reply": "approve_with_text"}
+        return _approve(rt, job, msg)
     if command == "cancel":
         if job.state not in (JobState.NEEDS_INFO, JobState.AWAITING_APPROVAL):
             return _status(rt, job, msg)

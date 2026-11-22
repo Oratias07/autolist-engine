@@ -113,7 +113,7 @@ class GmailSender:
         gmail_id = self.send(msg)
         meta = self._meta(gmail_id)
         if meta is None:
-            # sent, but Gmail did not answer the read-back (YTS-1007, 22.11.2026). The mail is
+            # sent, but Gmail did not answer the read-back (JOB-1007, 22.11.2026). The mail is
             # out: when its thread is known, never fail a sent mail. Its Message-ID stays
             # unknown (""), so the next email answers the owner's message instead.
             if msg.thread_id is None:
@@ -139,7 +139,7 @@ class GmailSender:
             sent = self._service.users().messages().send(userId="me", body=body).execute()
             message_id = str(sent["id"])
         except (TimeoutError, OSError) as exc:
-            # the reply timed out, but the mail may well be sent (YTS-1007, 22.11.2026). Never
+            # the reply timed out, but the mail may well be sent (JOB-1007, 22.11.2026). Never
             # send twice: look for it in Sent by its Message-ID; only if it is not there, fail.
             found = self._find_sent(send_id, msg.to)
             if found is None:

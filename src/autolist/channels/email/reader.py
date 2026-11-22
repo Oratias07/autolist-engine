@@ -66,19 +66,34 @@ class _TextOnly(HTMLParser):
         self.out: list[str] = []
         self._skip = 0
         self._quote = 0
+        # open elements, each marked when it opened a quote: a quote ends with its own closing
+        # tag, so text after it is read again (security review 22.11.2026, L5)
+        self._open: list[tuple[str, bool]] = []
+
+    _VOID: frozenset[str] = frozenset({"br", "img", "hr", "meta", "link", "input", "wbr"})
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in self._SKIP:
             self._skip += 1
         classes = " ".join(v or "" for k, v in attrs if k == "class")
-        if tag == "blockquote" or "gmail_quote" in classes:
+        is_quote = tag == "blockquote" or "gmail_quote" in classes
+        if is_quote:
             self._quote += 1
+        if tag not in self._VOID:
+            self._open.append((tag, is_quote))
         if tag in self._BREAK:
             self.out.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
         if tag in self._SKIP and self._skip:
             self._skip -= 1
+        if any(t == tag for t, _ in self._open):
+            while self._open:
+                t, was_quote = self._open.pop()
+                if was_quote and self._quote:
+                    self._quote -= 1
+                if t == tag:
+                    break
 
     def handle_data(self, data: str) -> None:
         if not self._skip and not self._quote:
@@ -131,6 +146,25 @@ def _quote_header(lines: list[str], i: int) -> bool:
     return False
 
 
+def signature_block(text: str) -> str:
+    """The lines after the "-- " signature line, up to a quote header (normalised), or "".
+
+    Approval compares it with the owner's signature in his first email: "מאשר" followed by
+    "-- " and anything else is never a clean approval (security review 22.11.2026, L5)."""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if _quote_header(lines, i):
+            return ""
+        if line.rstrip("\r") in ("--", "-- "):
+            block: list[str] = []
+            for j in range(i + 1, len(lines)):
+                if _quote_header(lines, j):
+                    break
+                block.append(lines[j])
+            return " ".join(" ".join(_BIDI.sub("", x).split()) for x in block).strip()
+    return ""
+
+
 def strip_quoted(text: str) -> str:
     lines = text.splitlines()
     for i, line in enumerate(lines):
@@ -174,6 +208,7 @@ def fetch_message(
     else:
         body = ""
     text = strip_quoted(body)[:_MAX_TEXT_CHARS]
+    signature = signature_block(body)[:_MAX_TEXT_CHARS]
 
     attachments: list[Attachment] = []
     for p in parts:
@@ -221,4 +256,5 @@ def fetch_message(
         attachments=attachments,
         rfc_message_id=header("message-id"),
         in_reply_to=header("in-reply-to"),
+        signature=signature,
     )

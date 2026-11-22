@@ -226,3 +226,56 @@ def test_watchdog_route() -> None:
     rig = Rig({}, runtime=JobRig(extraction([])).rt)
     r = rig.client.post("/cron/watchdog")
     assert (r.status_code, r.json()) == (200, {"failed": [], "expired": []})
+
+
+def test_an_automatic_reply_is_dropped_without_any_answer() -> None:
+    """Security review 22.11.2026 (M1): no mail loops with an auto-responder."""
+    owner = parse_store_config(copy.deepcopy(VALID_STORE)).channels.email.allowed_senders[0]
+    auto = _msg(owner, GOOD_AR)
+    auto["payload"]["headers"].append({"name": "Auto-Submitted", "value": "auto-replied"})
+    bulk = _msg(owner, GOOD_AR)
+    bulk["payload"]["headers"].append({"name": "Precedence", "value": "bulk"})
+    rig = Rig({"history.list": [_history(["a1", "a2"], "103")], "get": [auto, bulk]})
+    assert rig.client.post("/events/gmail", json=PUSH).json() == {"accepted": 0}
+    assert rig.queue.tasks == []
+    docs = rig.fs.data["processed_messages"]
+    assert docs["a1"]["outcome"] == docs["a2"]["outcome"] == "auto_reply"
+
+
+def test_a_header_fetch_error_loses_no_email() -> None:
+    """Security review 22.11.2026 (L4): the claim is released and the cursor stays."""
+    owner = parse_store_config(copy.deepcopy(VALID_STORE)).channels.email.allowed_senders[0]
+    rig = Rig(
+        {
+            "history.list": [_history(["m1"], "101"), _history(["m1"], "101")],
+            "get": [TimeoutError("timed out"), _msg(owner, GOOD_AR)],
+        }
+    )
+    client = TestClient(rig.client.app, raise_server_exceptions=False)
+    assert client.post("/events/gmail", json=PUSH).status_code == 500
+    assert "m1" not in rig.fs.data.get("processed_messages", {})
+    assert rig.state.history_id() == "100"
+    assert rig.client.post("/events/gmail", json=PUSH).json() == {"accepted": 1}
+    assert rig.state.history_id() == "101" and len(rig.queue.tasks) == 1
+
+
+def test_a_queue_error_loses_no_email() -> None:
+    owner = parse_store_config(copy.deepcopy(VALID_STORE)).channels.email.allowed_senders[0]
+    rig = Rig(
+        {
+            "history.list": [_history(["m1"], "101"), _history(["m1"], "101")],
+            "get": [_msg(owner, GOOD_AR), _msg(owner, GOOD_AR)],
+        }
+    )
+
+    def broken(path: str, payload: dict[str, Any]) -> str:
+        raise RuntimeError("queue down")
+
+    real = rig.queue.enqueue
+    rig.queue.enqueue = broken  # type: ignore[method-assign]
+    client = TestClient(rig.client.app, raise_server_exceptions=False)
+    assert client.post("/events/gmail", json=PUSH).status_code == 500
+    assert "m1" not in rig.fs.data.get("processed_messages", {})
+    assert rig.state.history_id() == "100"
+    rig.queue.enqueue = real  # type: ignore[method-assign]
+    assert rig.client.post("/events/gmail", json=PUSH).json() == {"accepted": 1}

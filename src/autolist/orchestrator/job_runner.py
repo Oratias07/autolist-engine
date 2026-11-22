@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from autolist.channels.email.thread_reader import agent_message_count
 from autolist.core.errors import CostCapExceeded
 from autolist.core.logging import get_logger
 from autolist.core.models import JobState, OutboundMessage
@@ -71,6 +72,12 @@ async def _run(rt: Runtime, payload: dict[str, Any]) -> dict[str, Any]:
     event = payload.get("event")
     if event == "email_received":
         msg = read(rt, str(payload["gmail_id"]))
+        cap: int = rt.config.require("agent.max_agent_emails_per_thread")
+        if agent_message_count(rt.gmail(), msg.thread_id) >= cap:
+            # a mail loop (an auto-responder the headers did not reveal) or a runaway thread:
+            # no more answers here, the developer looks (security review 22.11.2026, M1)
+            alert_developer(rt, "-", "thread_mail_cap", "-", f"thread {msg.thread_id}: {cap}")
+            return {"skipped": True, "reason": "thread_mail_cap"}
         job = rt.jobs.by_thread(msg.thread_id)
         if job is not None:
             try:

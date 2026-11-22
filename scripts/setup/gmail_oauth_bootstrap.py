@@ -7,8 +7,8 @@
 
 Usage (Cloud Shell):
   pip install --user --quiet google-auth-oauthlib google-cloud-secret-manager
-  python3 gmail_oauth_bootstrap.py --project yts-autolist \
-      --client-file client_secret.json --mailbox yts.products.agent@gmail.com
+  python3 gmail_oauth_bootstrap.py --project <gcp-project> \
+      --client-file client_secret.json --mailbox <agent-mailbox>
 """
 
 from __future__ import annotations

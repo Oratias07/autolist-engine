@@ -27,34 +27,66 @@ class AcceptedMessage:
     rfc_message_id: str  # the Message-ID header, for In-Reply-To
 
 
+_AUTO_PRECEDENCE = frozenset({"bulk", "junk", "list", "auto_reply"})
+
+
+def is_automatic(headers: list[tuple[str, str]]) -> bool:
+    """An auto-reply or bulk mail (RFC 3834 and common headers): never answered."""
+    for name, value in headers:
+        n, v = name.lower(), value.strip().lower()
+        if n == "auto-submitted" and v and v != "no":
+            return True
+        if n == "precedence" and v in _AUTO_PRECEDENCE:
+            return True
+        if n in ("x-autoreply", "x-autorespond"):
+            return True
+    return False
+
+
 def poll_accepted(
     service: Any,
     config: EmailChannelConfig,
     state: ChannelStateStore,
     processed: ProcessedMessages,
     now: datetime,
-) -> list[AcceptedMessage]:
+) -> tuple[list[AcceptedMessage], str | None]:
+    """The new accepted messages and the history id to move the cursor to.
+
+    The caller moves the cursor only after every accepted message is queued. On any error,
+    every claim made here that is not finished is released, so the next push retries it
+    (security review 22.11.2026, L4: a timeout must never lose an owner email)."""
     cursor = state.history_id()
     if cursor is None:
         # no cursor yet: the watch was never started by this service, nothing can be listed
         log.warning("gmail push ignored: no history cursor (run renew-watch first)")
-        return []
+        return [], None
     ids, latest = new_message_ids(service, cursor)
     accepted: list[AcceptedMessage] = []
-    for mid in ids:
-        if not processed.claim(mid, now, "seen"):
-            continue
-        headers, thread_id = message_headers(service, mid)
-        verdict = verify_sender(headers, config)
-        if not verdict.accepted:
-            processed.set_outcome(mid, "rejected", reason=verdict.reason)
-            log.info("message rejected", extra={"gmail_id": mid, "reason": verdict.reason})
-            continue
-        rfc_id = next((v for n, v in headers if n.lower() == "message-id"), "")
-        processed.set_outcome(mid, "accepted", thread_id=thread_id)
-        accepted.append(AcceptedMessage(mid, thread_id, rfc_id))
-    state.set_history_id(latest)
-    return accepted
+    current: str | None = None
+    try:
+        for mid in ids:
+            if not processed.claim(mid, now, "seen"):
+                continue
+            current = mid
+            headers, thread_id = message_headers(service, mid)
+            current = None
+            verdict = verify_sender(headers, config)
+            if not verdict.accepted:
+                processed.set_outcome(mid, "rejected", reason=verdict.reason)
+                log.info("message rejected", extra={"gmail_id": mid, "reason": verdict.reason})
+                continue
+            if is_automatic(headers):
+                processed.set_outcome(mid, "auto_reply")
+                log.info("automatic reply dropped", extra={"gmail_id": mid})
+                continue
+            rfc_id = next((v for n, v in headers if n.lower() == "message-id"), "")
+            processed.set_outcome(mid, "accepted", thread_id=thread_id)
+            accepted.append(AcceptedMessage(mid, thread_id, rfc_id))
+    except Exception:
+        for mid in [m for m in [current] if m] + [a.message_id for a in accepted]:
+            processed.release(mid)
+        raise
+    return accepted, latest
 
 
 def renew_watch(service: Any, topic_path: str, state: ChannelStateStore) -> int:

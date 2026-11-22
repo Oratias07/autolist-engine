@@ -140,10 +140,10 @@ def test_unknown_section_refused() -> None:
 def test_write_listing_runs_both_prompts_on_write_model() -> None:
     llm = FakeLLM(_title(open_points=["צבע"]), _desc(open_points=["צבע", "חומר"]))
     out = write_listing(
-        FACTS, llm=llm, playbook=PLAYBOOK, glossary=GLOSSARY, voice="ענייני", job_id="YTS-1001"
+        FACTS, llm=llm, playbook=PLAYBOOK, glossary=GLOSSARY, voice="ענייני", job_id="JOB-1001"
     )
     assert [r.prompt for r in llm.requests] == ["write_title", "write_description"]
-    assert all(r.model_role == "write" and r.job_id == "YTS-1001" for r in llm.requests)
+    assert all(r.model_role == "write" and r.job_id == "JOB-1001" for r in llm.requests)
     assert all("199" not in r.variables["facts_json"] for r in llm.requests)
     assert all(not r.images for r in llm.requests)
     assert out.title == "כיסא משרדי CH-200"
@@ -154,7 +154,7 @@ def test_write_listing_runs_both_prompts_on_write_model() -> None:
 def test_details_reach_the_writer_and_the_item_code_does_not() -> None:
     facts = [
         *FACTS,
-        _f("item_code", "1571"),
+        _f("item_code", "4242"),
         _f("detail", 'אורך 40 מ"מ'),
         _f("detail", "לכל סוגי המשטחים"),
         _f("detail", 'אורך 40 מ"מ'),
@@ -169,8 +169,8 @@ def test_details_reach_the_writer_and_the_item_code_does_not() -> None:
 
 
 def test_item_code_stands_in_for_a_missing_model() -> None:
-    facts = [_f("name", "שקיות אשפה"), _f("item_code", "301498")]
-    assert [f["text"] for f in writer_facts(facts)] == ["name: שקיות אשפה", "model: 301498"]
+    facts = [_f("name", "שקיות אשפה"), _f("item_code", "500100")]
+    assert [f["text"] for f in writer_facts(facts)] == ["name: שקיות אשפה", "model: 500100"]
 
 
 def test_no_benefits_heading_over_an_empty_list() -> None:

@@ -30,8 +30,8 @@ async def find_duplicate(
     model and item code). No server-side search is recorded in the field map.
 
     Returns (store field, value, product_id) or None. Exact match after trimming spaces and
-    case (a variant such as "T8103LG" is another product). An empty store field never
-    matches (DEV 22.11.2026: M2275 was in the store as model "Tenerife", SKU "M2275")."""
+    case (a variant such as "Q9003LG" is another product). An empty store field never
+    matches (DEV 22.11.2026: Q9001 was in the store as model "Atlas", SKU "Q9001")."""
     wanted = {_code(c) for c in codes if _code(c)}
     if not wanted:
         raise ValueError("duplicate check needs a model or an item code")

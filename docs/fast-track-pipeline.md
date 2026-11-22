@@ -2,7 +2,7 @@
 document: fast-track pipeline (P1-04 to P1-08)
 status: approved         # each module SPEC gets its section from here, in the same PR as its code
 approved_by: DEV (Or)
-approved_at: 2026-11-14  # PR #39 + chat (several products per email, YTS-1001, image choice and printed-text rule)
+approved_at: 2026-11-14  # PR #39 + chat (several products per email, JOB-1001, image choice and printed-text rule)
 ---
 
 # Fast-track pipeline: from an owner email to a product saved hidden and disabled
@@ -43,7 +43,7 @@ New states are marked. Waiting states cost no server time.
   - If the email does not separate the products clearly (which price, quantity or photo belongs to which product), no job is opened. The agent asks one clarifying question in the original thread.
   - Photos are matched to products only by what the owner states (file name or order written in the email). An unmatched photo becomes a question, not a guess.
 - **Thread → job:** the Gmail thread id is the key. A reply in a job's thread continues that job.
-- **Job id:** the prefix `agent.job_id_prefix` and a counter in Firestore that starts at `agent.first_job_number`. DEV (14.11.2026) left the choice to the implementer: `YTS-1001`, matching the subject format already in `docs/voice.md`.
+- **Job id:** the prefix `agent.job_id_prefix` and a counter in Firestore that starts at `agent.first_job_number`. DEV (14.11.2026) left the choice to the implementer: `JOB-1001`, matching the subject format already in `docs/voice.md`.
 - **A reply in a thread whose job is final** gets `out_of_scope` with one line: send a new email for a new product.
 
 ## Required and optional details (store open question #34)
@@ -146,5 +146,5 @@ At most `agent.max_revision_rounds` versions. After that the job is escalated to
 ## Decisions needed from DEV
 1. The states and the required/optional list above.
 2. Fast-track gaps: no category, main image only, wording corrections forwarded to the developer. (Several products per email are supported: DEV, 14.11.2026.)
-3. Job ids: `YTS-1001` and up (decided 14.11.2026).
+3. Job ids: `JOB-1001` and up (decided 14.11.2026).
 4. Printed text: decided as described under Images (two options always, `printed_text` from the extraction call, explicit warning and recommendation).

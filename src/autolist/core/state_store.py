@@ -49,6 +49,10 @@ class ProcessedMessages:
             return False
         return True
 
+    def release(self, message_id: str) -> None:
+        """Forget a claim that was not finished, so a retry handles the message again."""
+        self._col.document(message_id).delete()
+
     def set_outcome(self, message_id: str, outcome: str, **details: str) -> None:
         doc = self._col.document(message_id)
         snap = doc.get()

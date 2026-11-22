@@ -21,7 +21,7 @@ def _msg(cfg: EmailChannelConfig, **over: Any) -> dict[str, Any]:
     msg: dict[str, Any] = {
         "labelIds": ["SENT"],
         "payload": {
-            "headers": [{"name": "From", "value": f"YTS <{cfg.agent_mailbox}>"}],
+            "headers": [{"name": "From", "value": f"Agent <{cfg.agent_mailbox}>"}],
             "parts": [
                 {"mimeType": "text/plain", "filename": "", "body": {"data": _b(b"hi")}},
                 {
