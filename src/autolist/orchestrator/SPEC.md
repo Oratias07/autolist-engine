@@ -169,3 +169,21 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
 - **Duplicate check by model or SKU (DEV 22.11.2026):**
   - The owner's model and item code are each compared with the store's model and SKU: exact after trimming spaces, ignoring case. An empty store field never matches.
   - Q9001 was missed before this: in the store it is model "Atlas", SKU "Q9001". A variant such as "Q9003LG" is another product.
+
+## Weekly cost report (B-01) — status: proposed (22.11.2026, awaiting DEV)
+
+Decision 02.11.2026; DEV 22.11.2026: fixed costs only when known; Google Cloud always shown, also at 0.
+
+- **Trigger:** a Scheduler job (`costs.weekly_report.cron`, `costs.weekly_report.timezone`; the store asks for Sunday 08:30 Asia/Jerusalem) calls `POST /cron/weekly-cost` as the invoker.
+- **Week:** the 7 days before the run, from Sunday 00:00 to Saturday 24:00 in the store timezone. **Month:** the 1st of the month until the run.
+- **Figures, all from records, none estimated:**
+  - variable costs per category (`llm`, `image`, and `search` only once something records it) for the week and the month, and the number of jobs that had costs, all from `CostLedger` entries;
+  - the monthly cap from `costs.monthly_cap`;
+  - Google Cloud month-to-date from `core.gcp_billing` (below): the net cost after credits, in the billing account's currency, with the date of the newest row. If the reader fails or returns no table, the line says that the figure is not available. It never shows 0 in that case. A real 0 is shown as 0;
+  - fixed costs from `costs.fixed`, a list of `{name, amount, currency, period, source}`. An empty list gives the fragment `_fixed_none`.
+- **Recipient:** `agent.developer_contact` while the template `weekly_cost_report` is `draft`. The owner gets it only after the template is approved (the service never uses draft texts).
+- **Once per week:** a create-only claim `weekly_reports/<week start>`, so a retried Scheduler call sends nothing twice.
+- **Errors:** a failure alerts the developer (`weekly_cost_report_failed`) and returns 500. Nothing is retried by the service.
+- **Acceptance:** a synthetic ledger gives the expected week and month lines; Google Cloud 0 is shown as 0, and a reader failure is shown as not available; an empty `costs.fixed` gives `_fixed_none`; a second call in the same week sends nothing; while the template is draft, only the developer receives it.
+
+`core.gcp_billing` (proposed): `month_to_date(project_id, start, end) -> GcpCost | None`. It reads the Cloud Billing standard export table named in `costs.weekly_report.billing_table`, with one parameterised, read-only query: `SUM(cost) + SUM(credits.amount)` for the project, grouped by currency. Dependency: `google-cloud-bigquery`. The query scans kilobytes (BigQuery free tier); its bytes are logged. Permissions for `autolist-run`: `bigquery.dataViewer` on the export dataset only, and `bigquery.jobUser` on the project.
