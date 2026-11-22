@@ -159,3 +159,6 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
   - The model gets the list of every job of the same owner email, with the job of this thread marked. It returns which ones to cancel, or "not a cancel" ("בטל את המבצע", "אל תבטל"). Not a cancel means the reply goes on as before.
   - Only NEEDS_INFO and AWAITING_APPROVAL jobs are cancelled. One `cancelled_list` answer goes to the thread the owner wrote in, listing every named job with its state. When it is unclear which products are meant, `cancel_which` is sent and nothing is cancelled.
   - Works in an old receipt thread too. Approval is never resolved this way.
+- **Rename from the owner's own text (live 22.11.2026):**
+  - The model returned the name without brackets and commas, so the exact title is now read from the reply text. That is the quoted text holding the name's quote, or, without quotation marks, from the quote to the end of its line.
+  - Other facts the model read out of the name (a model, a material) are dropped.

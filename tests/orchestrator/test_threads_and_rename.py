@@ -158,3 +158,41 @@ def test_owner_title_and_header_lines() -> None:
     assert owner_title("״כיסא״") == "כיסא"
     assert one_line("a\r\nb\tc") == "a b c"
     assert reply_subject("Re: x") == "Re: x" and reply_subject("x") == "Re: x"
+
+
+async def test_the_live_22_11_rename_uses_the_owner_text_not_the_model_value() -> None:
+    """Live 22.11.2026: the model returned the name without brackets and commas, and also
+    read a model and a detail out of the name. The title is his own text, and nothing else
+    from inside the name becomes a fact."""
+    rig = await _two()
+    written = rig.llm.prompts.count("write_title")
+    name = "[לא למכירה] -בדיקה- כיסא גב בינוני, גב ומושב דמוי עור שחור, C1"
+    out = await _reply(
+        rig,
+        "T-1",
+        f'שני שם של המוצר ל"{name}"',
+        classified(
+            "facts",
+            name=q("כיסא גב בינוני גב ומושב דמוי עור שחור C1", name),
+            model=q("C1", "C1"),
+            details=[q("גב ומושב דמוי עור שחור", "גב ומושב דמוי עור שחור")],
+        ),
+    )
+    assert out["reply"] == "new_version"
+    job = _job(rig, "T-1")
+    assert job.versions[-1].title == name
+    assert rig.llm.prompts.count("write_title") == written  # nothing new: no rewrite
+    assert [f.key for f in job.facts].count("detail") == 0
+
+
+async def test_a_name_without_quotation_marks_runs_to_the_end_of_its_line() -> None:
+    rig = await _two()
+    await _reply(
+        rig,
+        "T-1",
+        "שם: כיסא מנהלים יוקרתי דגם C1\nתודה",  # noqa: RUF001
+        classified(
+            "facts", name=q("כיסא מנהלים יוקרתי", "כיסא מנהלים יוקרתי"), model=q("C1", "C1")
+        ),
+    )
+    assert _job(rig, "T-1").versions[-1].title == "כיסא מנהלים יוקרתי דגם C1"
