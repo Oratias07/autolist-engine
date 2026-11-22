@@ -92,7 +92,7 @@ async def apply_facts(
         return {"job_id": job.job_id, "reply": "generating"}
 
     # AWAITING_APPROVAL: a name is the owner's exact title from now on (DEV 22.11.2026)
-    c = c.model_copy(update={"facts": as_title_override(c.facts)})
+    c = c.model_copy(update={"facts": as_title_override(c.facts, msg.text)})
     merged = job.model_copy(update={"facts": [*job.facts, *c.facts]})
     if not c.facts and lifestyle is None:
         _ask(rt, job, msg, [*unverified, *extra])
