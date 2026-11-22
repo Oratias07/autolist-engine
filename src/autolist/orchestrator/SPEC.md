@@ -164,3 +164,6 @@ Store-repo texts used: `agent/commands.yaml`, `agent/state_labels.yaml`, replies
   - Other facts the model read out of the name (a model, a material) are dropped.
 - **Developer alerts never raise (live 22.11.2026):** an alert that cannot be sent is logged as `developer alert not sent`, with the same redacted detail. The real failure stays the one that is raised and logged.
 - **One Gmail client per thread:** httplib2 is not thread-safe, and the push handler and the job steps run in parallel. This is the suspected cause of the 22.11 Gmail timeouts.
+- **Duplicate check by model or SKU (DEV 22.11.2026):**
+  - The owner's model and item code are each compared with the store's model and SKU: exact after trimming spaces, ignoring case. An empty store field never matches.
+  - M2275 was missed before this: in the store it is model "Tenerife", SKU "M2275". A variant such as "T8103LG" is another product.
