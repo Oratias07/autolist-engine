@@ -131,16 +131,47 @@ def jobs_lines(jobs: list[Job]) -> str:
 def send(
     rt: Runtime, msg: OutboundMessage, job: Job | None = None
 ) -> tuple[SentMessage, Job | None]:
-    """Deliver, and record the sent id (and the job's own thread, if it had none) on the job."""
-    sent = rt.mail.deliver(msg)
+    """Deliver, and record the sent id (and the job's own thread, if it had none) on the job.
+
+    A job's emails form one thread in the owner's mailbox too (DEV 22.11.2026): each one goes
+    in the job's thread, with the thread's fixed subject, answering the newest message."""
     if job is None:
-        return sent, None
-    update: dict[str, Any] = {"sent_messages": [*job.sent_messages, sent.gmail_id]}
-    if job.thread_id is None and msg.thread_id is None:
+        return rt.mail.deliver(msg), None
+    subject = job.thread_subject or one_line(
+        rt.fragment(THREAD_SUBJECT, {"job_id": job.job_id, "product_name": product_name(job)})
+    )
+    msg = msg.model_copy(
+        update={
+            "thread_id": msg.thread_id or job.thread_id,
+            "in_reply_to": msg.in_reply_to or job.last_rfc_message_id,
+            "subject": subject,
+        }
+    )
+    sent = rt.mail.deliver(msg)
+    update: dict[str, Any] = {
+        "sent_messages": [*job.sent_messages, sent.gmail_id],
+        "thread_subject": subject,
+        "last_rfc_message_id": sent.rfc_message_id,
+    }
+    if job.thread_id is None:
         update["thread_id"] = sent.thread_id
     job = job.model_copy(update=update)
     rt.jobs.save(job)
     return sent, job
+
+
+THREAD_SUBJECT = "_thread_subject"
+
+
+def one_line(text: str) -> str:
+    """A header-safe single line: no line breaks, single spaces."""
+    return " ".join(text.split())
+
+
+def reply_subject(subject: str) -> str:
+    """The subject of an answer in the owner's own thread: "Re: " once."""
+    s = one_line(subject)
+    return s if s.lower().startswith("re:") else f"Re: {s}"
 
 
 def to_owner(

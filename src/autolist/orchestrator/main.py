@@ -40,6 +40,7 @@ PROMPTS_IN_USE = (
 )
 REPLIES_IN_USE = (
     "_category_none",
+    "_thread_subject",
     "_lifestyle_attached",
     "_lifestyle_none",
     "_sale_none",

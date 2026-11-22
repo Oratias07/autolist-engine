@@ -22,6 +22,7 @@ from autolist.orchestrator.runtime import (
     numbered,
     original_subject,
     product_name,
+    reply_subject,
     send,
     to_owner,
 )
@@ -131,7 +132,7 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
     prefix: str = rt.config.require("agent.job_id_prefix")
     first: int = rt.config.require("agent.first_job_number")
     jobs: list[Job] = []
-    for item in items:
+    for n, item in enumerate(items):
         job = new_job(
             rt.jobs,
             prefix=prefix,
@@ -152,6 +153,16 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
                 "source_rfc_message_id": msg.rfc_message_id,
             }
         )
+        if n == 0:
+            # DEV 22.11.2026: the first product continues in the owner's own thread, so two
+            # products make two threads. Every later product opens one thread of its own.
+            job = job.model_copy(
+                update={
+                    "thread_id": msg.thread_id,
+                    "thread_subject": reply_subject(original_subject(msg.subject)),
+                    "last_rfc_message_id": msg.rfc_message_id,
+                }
+            )
         rt.jobs.save(job)
         jobs.append(job)
 

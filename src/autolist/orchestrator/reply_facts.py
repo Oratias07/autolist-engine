@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 from autolist.content.writer import write_listing, writer_facts
-from autolist.core.facts import present_keys
+from autolist.core.facts import as_title_override, present_keys
 from autolist.core.models import ChannelMessage, Job, JobState, ReplyClassification
 from autolist.core.playbook import require
 from autolist.core.state_machine import transition
@@ -91,7 +91,9 @@ async def apply_facts(
         rt.queue.enqueue(JOB_TASK_PATH, {"event": "generate", "job_id": job.job_id})
         return {"job_id": job.job_id, "reply": "generating"}
 
-    # AWAITING_APPROVAL
+    # AWAITING_APPROVAL: a name is the owner's exact title from now on (DEV 22.11.2026)
+    c = c.model_copy(update={"facts": as_title_override(c.facts)})
+    merged = job.model_copy(update={"facts": [*job.facts, *c.facts]})
     if not c.facts and lifestyle is None:
         _ask(rt, job, msg, [*unverified, *extra])
         return {"job_id": job.job_id, "reply": "needs_info"}
