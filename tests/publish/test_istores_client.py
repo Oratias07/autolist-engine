@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -141,19 +142,84 @@ async def test_create_requires_status_zero(status: Any) -> None:
     await client.aclose()
 
 
+def _create_handler(
+    post: httpx.Response, product: dict[str, Any] | None = None
+) -> Callable[[httpx.Request], httpx.Response]:
+    fresh = {"hidden": 1, "status": 0, "model": "Q9001", "sku": ""} | (product or {})
+
+    def handler(r: httpx.Request) -> httpx.Response:
+        if r.method == "POST":
+            return post
+        return httpx.Response(200, json={"success": True, "product": fresh})
+
+    return handler
+
+
 async def test_create_parses_id_and_registers() -> None:
-    client, rec, reg, _ = make_client(lambda r: httpx.Response(200, text='"productID: 970"'))
-    pid = await client.create_product({"hidden": 1, "status": 0, "price": 25}, job_id="job-1")
+    client, rec, reg, _ = make_client(_create_handler(httpx.Response(200, text='"productID: 970"')))
+    body = {"hidden": 1, "status": 0, "price": 25, "model": "Q9001"}
+    pid = await client.create_product(body, job_id="job-1")
     assert pid == 970
     assert reg.is_active(970)
-    assert json.loads(rec.calls[0].content) == {"hidden": 1, "status": 0, "price": 25}
+    assert json.loads(rec.calls[0].content) == body
+    assert [(c.method, c.url.path) for c in rec.calls][1] == ("GET", "/products/970")
     await client.aclose()
 
 
-async def test_create_without_id_raises_unknown_and_registers_nothing() -> None:
-    client, _, reg, _ = make_client(lambda r: httpx.Response(200, text="created"))
+async def test_create_json_answer_with_success_true_registers() -> None:
+    answer = httpx.Response(
+        200, json={"response": "Product added, productID: 970", "success": True}
+    )
+    client, _, reg, _ = make_client(_create_handler(answer))
+    assert await client.create_product({"hidden": 1, "status": 0, "model": "Q9001"}, None) == 970
+    assert reg.is_active(970)
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        httpx.Response(200, text="created"),
+        httpx.Response(200, json={"response": "productID: 970", "success": False}),
+        httpx.Response(200, text="duplicate of productID: 12, new productID: 970"),
+    ],
+    ids=["no id", "success false", "two ids"],
+)
+async def test_create_unclear_answer_raises_unknown_and_registers_nothing(
+    answer: httpx.Response,
+) -> None:
+    client, rec, reg, _ = make_client(_create_handler(answer))
     with pytest.raises(CreateResultUnknown):
-        await client.create_product({"hidden": True, "status": False}, job_id=None)
+        await client.create_product(
+            {"hidden": True, "status": False, "model": "Q9001"}, job_id=None
+        )
+    assert reg.get(970) is None and reg.get(12) is None
+    assert [c.method for c in rec.calls] == ["POST"]
+    await client.aclose()
+
+
+@pytest.mark.parametrize(
+    "product",
+    [{"model": "OTHER"}, {"model": ""}],
+    ids=["other model", "empty model"],
+)
+async def test_create_id_of_a_product_that_does_not_match_is_not_registered(
+    product: dict[str, Any],
+) -> None:
+    """An id in the answer that points at someone else's product never reaches the registry."""
+    client, _, reg, _ = make_client(
+        _create_handler(httpx.Response(200, text='"productID: 970"'), product)
+    )
+    with pytest.raises(CreateResultUnknown, match="does not match"):
+        await client.create_product({"hidden": 1, "status": 0, "model": "Q9001"}, None)
+    assert reg.get(970) is None
+    await client.aclose()
+
+
+async def test_create_body_without_codes_is_never_registered() -> None:
+    client, _, reg, _ = make_client(_create_handler(httpx.Response(200, text='"productID: 970"')))
+    with pytest.raises(CreateResultUnknown, match="no model or sku"):
+        await client.create_product({"hidden": 1, "status": 0}, None)
     assert reg.get(970) is None
     await client.aclose()
 
