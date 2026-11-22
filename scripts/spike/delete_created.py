@@ -14,8 +14,8 @@ from pathlib import Path
 
 from autolist.core.config import get_secret, load_store_config
 from autolist.core.logging import configure_logging
-from autolist.publish.firestore_registry import FirestoreRegistry
 from autolist.publish.errors import StoreAPIError
+from autolist.publish.firestore_registry import FirestoreRegistry
 from autolist.publish.istores_client import IStoresClient
 
 
