@@ -6,6 +6,8 @@ owner reads comes from a reply template.
 
 from __future__ import annotations
 
+from autolist.agent_runtime.cancel_resolver import has_cancel_word
+from autolist.agent_runtime.commands import parse_command
 from autolist.channels.email.reader import fetch_message
 from autolist.channels.email.thread_reader import owner_messages, thread_has_agent_message
 from autolist.core.job_store import new_job
@@ -106,6 +108,11 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
 
     reply_to = msg  # the agent answers the newest message, in its thread
     msg, more_ids = with_thread_context(rt, msg)
+    if msg is not reply_to and parse_command(reply_to.text, rt.commands) == "cancel":
+        # "בטל" in a thread where the agent answered and opened no job (live 22.11.2026): nothing
+        # is opened, also when the earlier email had products waiting for a clarification
+        _reply(rt, reply_to, "nothing_to_cancel", {})
+        return []
     required: list[str] = require(rt.playbook, "listing.required")
     parsed: ParsedRequest = parse_request(
         msg, llm=rt.llm, intake=rt.config.intake, required=required, job_id=None
@@ -113,7 +120,9 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
     limit: int = rt.config.require("agent.max_products_per_email")
     items = parsed.items
     if not items:
-        _reply(rt, reply_to, "no_product_found", {})
+        # a cancel in other words, in a thread the agent answered: not "no product found" again
+        nothing = msg is not reply_to and has_cancel_word(reply_to.text)
+        _reply(rt, reply_to, "nothing_to_cancel" if nothing else "no_product_found", {})
         return []
     if len(items) > limit:
         _reply(
