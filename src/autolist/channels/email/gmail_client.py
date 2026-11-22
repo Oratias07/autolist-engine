@@ -10,7 +10,9 @@ from autolist.channels.errors import ChannelAuthError
 SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 
-def build_service(client_json: str, refresh_token: str) -> Any:  # pragma: no cover - live only
+def build_service(  # pragma: no cover - live only
+    client_json: str, refresh_token: str, timeout_s: int | None = None
+) -> Any:
     """Authorised Gmail service. Raises ``ChannelAuthError`` if the token cannot refresh."""
     from google.auth.exceptions import RefreshError
     from google.auth.transport.requests import Request
@@ -30,4 +32,10 @@ def build_service(client_json: str, refresh_token: str) -> Any:  # pragma: no co
         creds.refresh(Request())  # type: ignore[no-untyped-call]
     except RefreshError as exc:
         raise ChannelAuthError("agent mailbox token could not be refreshed") from exc
-    return build("gmail", "v1", credentials=creds, cache_discovery=False)
+    if timeout_s is None:
+        return build("gmail", "v1", credentials=creds, cache_discovery=False)
+    import httplib2  # type: ignore[import-untyped]
+    from google_auth_httplib2 import AuthorizedHttp  # type: ignore[import-untyped]
+
+    http = AuthorizedHttp(creds, http=httplib2.Http(timeout=timeout_s))
+    return build("gmail", "v1", http=http, cache_discovery=False)

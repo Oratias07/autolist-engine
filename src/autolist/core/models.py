@@ -71,6 +71,9 @@ class EmailChannelConfig(_Strict):
     pubsub_subscription: str
     text_direction: Literal["rtl", "ltr"]
     language: str  # BCP 47 tag for the HTML part, e.g. "he"
+    # Gmail API read timeout. The library default (60 s) cut a preview send with images
+    # (live 22.11.2026, YTS-1007). None: the library default (live runs that send no images).
+    api_timeout_s: int | None = Field(default=None, gt=0)
 
 
 class ChannelsConfig(_Strict):
