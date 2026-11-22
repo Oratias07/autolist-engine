@@ -17,6 +17,8 @@ Run the engine as a service that wakes up when the agent mailbox gets mail, work
 | Cloud Run service | `autolist-<stage>` | No public access. Scales to zero, max 1 instance, request timeout just above the job step limit. |
 | Runtime service account | `autolist-run` | Roles below. No project-wide role. |
 | Invoker service account | `autolist-invoke` | Only `run.invoker` on the service. Used by Pub/Sub push, Cloud Tasks and Scheduler (OIDC). |
+| Deploy service account (H1) | `autolist-deploy` | `run.developer` and `run.invoker` on the service only (the invoker role is for the `/health` check, and the app's caller gate holds it to `/health`), `artifactregistry.writer` on the repo, `serviceAccountUser` on `autolist-run`, and `secretmanager.viewer` (labels, never values) on the store's secrets. Usable only from the store repo's `deploy.yml` on `main` (WIF `attribute.workflow_ref`). `infra/split_ci.sh` creates it. |
+| CI service account after H1 | `autolist-ci` | Only what the live runs need (the secrets, the reference bucket, the Gmail pull subscription). Usable only from `live.yml` on `main`. No deploy rights. |
 | Pub/Sub push subscription | `gmail-agent-run` on the existing topic | Pushes to `/events/gmail`. The phase-0 pull subscription stays for spike checks. |
 | Cloud Tasks queue | `autolist-jobs` | One job at a time, no automatic retry of a failed job step. |
 | Cloud Scheduler job | `renew-gmail-watch`, daily | Calls `/cron/renew-watch`. Closes store open question #26. |

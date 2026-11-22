@@ -6,6 +6,7 @@ import copy
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from starlette.testclient import TestClient
 
 from autolist.core.config import parse_store_config
@@ -46,8 +47,11 @@ class Rig:
         gmail_results: dict[str, Any],
         cursor: str | None = "100",
         runtime: Any = None,
+        caller_check: str = "log",
     ) -> None:
-        cfg = parse_store_config(copy.deepcopy(VALID_STORE))
+        raw = copy.deepcopy(VALID_STORE)
+        raw["gcp"]["caller_check"] = caller_check
+        cfg = parse_store_config(raw)
         self.owner = cfg.channels.email.allowed_senders[0]
         self.fs = FakeFirestore()
         self.gmail = FakeGmail(gmail_results)
@@ -279,3 +283,50 @@ def test_a_queue_error_loses_no_email() -> None:
     assert rig.state.history_id() == "100"
     rig.queue.enqueue = real  # type: ignore[method-assign]
     assert rig.client.post("/events/gmail", json=PUSH).json() == {"accepted": 1}
+
+
+def _token(email: str) -> dict[str, str]:
+    """An ID token as Cloud Run hands it on: checked by Cloud Run, the signature replaced."""
+    import base64
+    import json
+
+    def part(d: dict[str, str]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+
+    return {"Authorization": f"Bearer {part({'alg': 'RS256'})}.{part({'email': email})}.SIG"}
+
+
+INVOKER = "invoke@example.iam.gserviceaccount.com"
+DEPLOY = "deploy@example.iam.gserviceaccount.com"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "headers", "status"),
+    [
+        ("GET", "/health", _token(INVOKER), 200),
+        ("GET", "/health", _token(DEPLOY), 200),
+        ("POST", "/cron/watchdog", _token(DEPLOY), 403),  # the deploy check: /health only
+        ("POST", "/events/gmail", _token("other@example.com"), 403),
+        ("POST", "/events/gmail", {}, 403),
+        ("POST", "/tasks/job", {"Authorization": "Bearer not-a-token"}, 403),
+    ],
+)
+def test_enforce_lets_only_the_invoker_call_and_the_deploy_check_read_health(
+    method: str, path: str, headers: dict[str, str], status: int
+) -> None:
+    rig = Rig({}, caller_check="enforce")
+    assert rig.client.request(method, path, headers=headers).status_code == status
+
+
+def test_enforce_passes_the_invoker_to_the_handler() -> None:
+    rig = Rig({}, caller_check="enforce")
+    r = rig.client.post("/events/gmail", json={"bad": 1}, headers=_token(INVOKER.upper()))
+    assert r.status_code == 400  # reached the handler, which refused the body
+
+
+def test_log_mode_records_the_caller_and_refuses_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    rig = Rig({})
+    with caplog.at_level("INFO"):
+        assert rig.client.get("/health", headers=_token("other@example.com")).status_code == 200
+    rec = next(r for r in caplog.records if r.getMessage() == "caller")
+    assert (rec.caller, rec.allowed) == ("other@example.com", False)  # type: ignore[attr-defined]
