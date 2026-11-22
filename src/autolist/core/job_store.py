@@ -1,7 +1,9 @@
 """Persistent jobs: one document per job, a thread index, and the job-number counter.
 
-The service runs one instance and one task at a time (infra/SPEC.md), so the counter is
-read and written without a transaction.
+The service runs one instance and one task at a time (infra/SPEC.md). A retried task can
+still overlap the attempt it replaces (a request that timed out keeps running), so the two
+writes that must happen once are claims made with a create-only document: a job number, and
+the publish of a job (security review 22.11.2026, L3).
 """
 
 from __future__ import annotations
@@ -9,8 +11,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Protocol
 
+from google.api_core.exceptions import AlreadyExists, Conflict
+
 from autolist.core.models import Job, JobState
 from autolist.core.state_machine import FINAL
+
+MAX_NUMBER_TRIES = 100
+
+
+def _create(doc: Any, data: dict[str, Any]) -> bool:
+    try:
+        doc.create(data)
+    except (AlreadyExists, Conflict):
+        return False
+    return True
 
 
 class JobStore(Protocol):
@@ -21,6 +35,9 @@ class JobStore(Protocol):
     def open_jobs(self) -> list[Job]: ...
     def by_source_thread(self, thread_id: str) -> list[Job]: ...
     def all_jobs(self) -> list[Job]: ...
+    def claim_publish(self, job_id: str, at: datetime) -> bool:
+        """True once per job. False: a publish of this job already started (never POST twice)."""
+        ...
 
 
 class InMemoryJobStore:
@@ -28,6 +45,7 @@ class InMemoryJobStore:
         self.jobs: dict[str, Job] = {}
         self.threads: dict[str, str] = {}
         self._last: int | None = None
+        self.publish_claims: dict[str, datetime] = {}
 
     def next_number(self, first: int) -> int:
         self._last = first if self._last is None else self._last + 1
@@ -55,19 +73,36 @@ class InMemoryJobStore:
     def all_jobs(self) -> list[Job]:
         return list(self.jobs.values())
 
+    def claim_publish(self, job_id: str, at: datetime) -> bool:
+        if job_id in self.publish_claims:
+            return False
+        self.publish_claims[job_id] = at
+        return True
+
 
 class FirestoreJobStore:
     def __init__(self, client: Any) -> None:
         self._jobs = client.collection("jobs")
         self._threads = client.collection("job_threads")
         self._counter = client.collection("counters").document("jobs")
+        self._numbers = client.collection("job_numbers")
+        self._publish_claims = client.collection("publish_claims")
 
     def next_number(self, first: int) -> int:
+        """The counter says where to start; the number is taken by creating its document, so
+        two overlapping calls never get the same number."""
         snap = self._counter.get()
         last = (snap.to_dict() or {}).get("last") if snap.exists else None
         number = first if last is None else int(last) + 1
-        self._counter.set({"last": number})
-        return number
+        for _ in range(MAX_NUMBER_TRIES):
+            if _create(self._numbers.document(str(number)), {"taken": True}):
+                self._counter.set({"last": number})
+                return number
+            number += 1
+        raise RuntimeError(f"no free job number after {MAX_NUMBER_TRIES} tries")
+
+    def claim_publish(self, job_id: str, at: datetime) -> bool:
+        return _create(self._publish_claims.document(job_id), {"at": at.isoformat()})
 
     def save(self, job: Job) -> None:
         self._jobs.document(job.job_id).set(job.model_dump(mode="json"))

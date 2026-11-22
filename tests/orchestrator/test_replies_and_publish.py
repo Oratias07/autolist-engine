@@ -276,3 +276,15 @@ async def test_approve_with_the_owner_usual_signature_still_approves() -> None:
     await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
     out = await _reply(rig, "מאשר\n-- \nOWNER-SIG www.example.com")
     assert out["reply"] == "approved"
+
+
+async def test_an_overlapping_publish_attempt_sends_no_second_post() -> None:
+    """A retried task while the first attempt still runs (security review 22.11.2026, L3)."""
+    rig = await _ready()
+    await _reply(rig, "מאשר")
+    assert rig.jobs.claim_publish("T-1", rig.rt.now())  # the first attempt took the claim
+    out = await _publish(rig)
+    assert out == {"skipped": True, "reason": "publish_already_claimed"}
+    assert rig.posted is None
+    assert rig.mail.templates()[-1] == "developer_alert"
+    assert _job(rig).state == S.PUBLISHING

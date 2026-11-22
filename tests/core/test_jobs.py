@@ -119,3 +119,18 @@ def test_latest_fact_wins() -> None:
     assert fact is not None
     assert fact.value == "450"
     assert job.fact("barcode") is None
+
+
+def test_publish_is_claimed_once(store: Any) -> None:
+    assert store.claim_publish("JOB-1001", T0)
+    assert not store.claim_publish("JOB-1001", T0 + timedelta(minutes=5))
+    assert store.claim_publish("JOB-1002", T0)
+
+
+def test_a_taken_number_is_skipped_by_an_overlapping_call() -> None:
+    """Two calls that both read the same counter never get the same number."""
+    db = FakeFirestore()
+    store = FirestoreJobStore(db)
+    db.collection("job_numbers").document("1001").create({"taken": True})  # the other call
+    assert store.next_number(1001) == 1002
+    assert store.next_number(1001) == 1003

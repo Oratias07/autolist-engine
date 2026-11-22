@@ -32,6 +32,7 @@ It contains no business decisions about products.
 | `cost_ledger.py` | P0 | Records and enforces spend (see below). |
 | `provenance.py` | P0 | `SourcedValue` helpers. `require_sources(obj)` raises `MissingProvenance([field paths])` for any non-null field without a source. |
 | `state_machine.py` | P1 | Allowed transitions; `transition(job, to, reason)` raises on an illegal move. |
+| `model_text.py` | — | `clean_title` (no control or bidi-override characters, no `<>`) and `clean_question` (also no links, web addresses or emails). Applied by the `Title` and `ModelQuestion` types on every model field that carries a title or a question to the owner (security review 22.11.2026, L6/L7). Lengths are bounded by each prompt's `max_output_tokens`. A title length limit waits for `playbook.title.max_length`, which is `null` (ask). |
 | `job_store.py` | P1 | Firestore persistence of `Job` with optimistic locking (version field). P0 uses an in-memory fake with the same interface. |
 | `playbook_loader.py` | P2 | Loads and validates `playbook.yaml`. A rule with value `null` is returned as `Unknown`, never coerced. |
 
@@ -187,9 +188,12 @@ These record how the approved behavior was implemented. No behavior was added.
 - **`job_store.py`:**
   - the `JobStore` protocol, with in-memory and Firestore implementations;
   - the thread index `job_threads`, and the counter `counters/jobs` (starts at `agent.first_job_number`);
+  - a job number is taken by creating `job_numbers/<n>`. A taken number is skipped, so two overlapping calls never share one (L3);
+  - `claim_publish(job_id, at)` creates `publish_claims/<job_id>`. It returns True only once per job (L3);
   - `new_job()`.
 
 **Acceptance:**
 - both stores pass the same tests;
 - final states have no exits;
-- only PUBLISHING reaches SAVED_HIDDEN.
+- only PUBLISHING reaches SAVED_HIDDEN;
+- a second `claim_publish` of a job returns False, and a taken job number is never returned again.

@@ -10,6 +10,7 @@ import re
 from collections.abc import Sequence
 from typing import Literal, Protocol
 
+from autolist.core.model_text import clean_title
 from autolist.core.models import ChannelMessage, Job, JobFact
 
 MAX_DETAILS = 12  # an owner email states a handful; more is not read
@@ -71,8 +72,9 @@ _QUOTES = "\"'״׳“”‘’ "  # noqa: RUF001
 
 def owner_title(value: str) -> str:
     """A name the owner gave in a reply, used exactly as he wrote it (DEV 22.11.2026): only
-    surrounding quotes and spaces are removed, and line breaks become single spaces."""
-    return " ".join(value.split()).strip(_QUOTES).strip()
+    surrounding quotes and spaces are removed, and line breaks become single spaces. Control
+    characters and angle brackets never pass (security review 22.11.2026, L7)."""
+    return clean_title(value).strip(_QUOTES).strip()
 
 
 _QUOTED = re.compile(r'["\u201c\u201d\u05f4]([^"\u201c\u201d\u05f4\n]+)["\u201c\u201d\u05f4]')
