@@ -13,7 +13,13 @@ import pytest
 
 from autolist.core.blob_store import InMemoryBlobStore
 from autolist.core.models import ImageRef, ProductDraft, SaleSpec
-from autolist.publish.errors import DuplicateProduct, UnobservedField, VerifyMismatch
+from autolist.publish.errors import (
+    CreateResultUnknown,
+    DuplicateProduct,
+    StoreAPIError,
+    UnobservedField,
+    VerifyMismatch,
+)
 from autolist.publish.publisher import create_hidden
 from tests.publish.conftest import make_client, make_config
 
@@ -106,7 +112,7 @@ async def test_creates_hidden_disabled_and_verifies() -> None:
     }
     assert store.posted["image"].startswith("https://storage.example.com/")
     assert "upc" not in store.posted
-    assert [c.method for c in rec.calls] == ["GET", "POST", "GET"]
+    assert [c.method for c in rec.calls] == ["GET", "POST", "GET", "GET"]  # adopt, then verify
 
 
 @pytest.mark.parametrize("field", ["sku", "model"])
@@ -189,7 +195,6 @@ async def test_the_same_extra_image_twice_is_refused_before_any_call() -> None:
         ({"status": 1}, "NOT disabled"),
         ({"price": 5}, "price"),
         ({"quantity": 9}, "quantity"),
-        ({"sku": "zzz"}, "sku"),
         ({"image": "https://elsewhere.example.com/a.jpg"}, "image"),
         ({"product_description": {"3": {"name": "אחר"}}}, "name"),
         ({"subtract": 0}, "subtract"),
@@ -301,3 +306,93 @@ async def test_duplicate_check_without_any_code_refuses() -> None:
             await find_duplicate(client, 100, ["  "])
     finally:
         await client.aclose()
+
+
+class LostAnswerStore(Store):
+    """The POST creates the product but its answer is lost (timeout, 5xx or no id)."""
+
+    def __init__(self, failure: str, **kw: Any) -> None:
+        super().__init__(**kw)
+        self.failure = failure
+
+    def __call__(self, r: httpx.Request) -> httpx.Response:
+        if r.method == "GET" and r.url.path.count("/") == 3 and self.posted is not None:
+            found = {"product_id": 970, "model": self.posted["model"], "sku": self.posted["sku"]}
+            return httpx.Response(200, json={"products": [found]})
+        if r.method == "POST":
+            self.posted = json.loads(r.content)
+            if self.failure == "timeout":
+                raise httpx.ReadTimeout("lost", request=r)
+            if self.failure == "5xx":
+                return httpx.Response(502)
+            return httpx.Response(200, text="ok")
+        return super().__call__(r)
+
+
+@pytest.mark.parametrize("failure", ["timeout", "5xx", "no id"])
+async def test_lost_create_answer_is_recovered_by_codes_without_a_second_post(
+    failure: str,
+) -> None:
+    blobs, store = InMemoryBlobStore(), LostAnswerStore(failure)
+    pid, rec, reg = await _run(store, _draft(blobs), blobs)
+    assert pid == 970
+    assert reg.is_active(970)
+    assert [c.method for c in rec.calls].count("POST") == 1
+
+
+async def test_lost_create_answer_and_nothing_found_raises_and_registers_nothing() -> None:
+    class Nothing(LostAnswerStore):
+        def __call__(self, r: httpx.Request) -> httpx.Response:
+            if r.method == "GET" and r.url.path.count("/") == 3:
+                return httpx.Response(200, json={"products": []})
+            return super().__call__(r)
+
+    blobs = InMemoryBlobStore()
+    with pytest.raises(StoreAPIError):
+        await _run(Nothing("timeout"), _draft(blobs), blobs)
+
+
+async def test_recovered_product_with_other_codes_is_not_registered() -> None:
+    blobs, store = InMemoryBlobStore(), LostAnswerStore("no id", sku="zzz")
+    client, _, reg, _ = make_client(store)
+    with pytest.raises(CreateResultUnknown, match="does not match"):
+        await create_hidden(
+            _draft(blobs),
+            config=make_config(),
+            client=client,
+            blobs=blobs,
+            language_id=LANG,
+            page_size=100,
+        )
+    assert reg.get(970) is None
+    await client.aclose()
+
+
+async def test_store_4xx_on_create_is_not_recovered() -> None:
+    class Refused(Store):
+        def __call__(self, r: httpx.Request) -> httpx.Response:
+            if r.method == "POST":
+                return httpx.Response(422, json={"success": False})
+            return super().__call__(r)
+
+    blobs = InMemoryBlobStore()
+    with pytest.raises(StoreAPIError):
+        await _run(Refused(), _draft(blobs), blobs)
+
+
+async def test_created_product_with_another_sku_is_unknown_not_registered() -> None:
+    blobs, store = InMemoryBlobStore(), Store(sku="zzz")
+    client, rec, reg, _ = make_client(store)
+    with pytest.raises(CreateResultUnknown, match="sku"):
+        await create_hidden(
+            _draft(blobs),
+            config=make_config(),
+            client=client,
+            blobs=blobs,
+            language_id=LANG,
+            page_size=100,
+        )
+    await client.aclose()
+    assert reg.get(970) is None
+    assert [c.method for c in rec.calls].count("POST") == 1
+    assert not [c for c in rec.calls if c.method in ("PUT", "DELETE")]

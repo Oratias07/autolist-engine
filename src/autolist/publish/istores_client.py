@@ -60,6 +60,21 @@ def check_allowed(method: str, path: str) -> None:
     raise EndpointNotAllowed(method, path)
 
 
+def _created_id(response: httpx.Response) -> int:
+    """The id in a create answer ("...productID: 970"). Exactly one id, and no
+    ``success: false`` when the answer is a JSON object; anything else is unknown."""
+    try:
+        parsed: Any = response.json()
+    except ValueError:
+        parsed = None
+    if isinstance(parsed, Mapping) and parsed.get("success", True) is not True:
+        raise CreateResultUnknown(f"create answer is not a success: {response.text[:200]}")
+    ids = set(_CREATED_ID.findall(response.text))
+    if len(ids) != 1:
+        raise CreateResultUnknown(f"no single product id in response: {response.text[:200]}")
+    return int(ids.pop())
+
+
 def _is_truthy_flag(value: Any) -> bool:
     return value is True or value == 1 or value == "1"
 
@@ -214,14 +229,38 @@ class IStoresClient:
             raise UnsafeCreate("products must be created with status: 0")
         check_allowed("POST", "/products")
         response = await self._request("POST", "/products", json_body=dict(body), idempotent=False)
-        match = _CREATED_ID.search(response.text)
-        if match is None:
-            raise CreateResultUnknown(f"no product id in response: {response.text[:200]}")
-        product_id = int(match.group(1))
+        product_id = _created_id(response)
+        await self.adopt_created(product_id, body, job_id)
+        return product_id
+
+    async def adopt_created(
+        self, product_id: int, body: Mapping[str, Any], job_id: str | None
+    ) -> None:
+        """Register ``product_id`` as created by this system, only after a GET shows the
+        product carrying the model and SKU of ``body``.
+
+        An id parsed from a create answer, or found by model or SKU after an unknown create
+        result, never reaches the registry unchecked: the registry is what lets PUT and
+        DELETE touch a product (security review 22.11.2026, L1/L2). Hidden and disabled are
+        checked by the verifier afterwards, so a product of ours that came back visible
+        stays in the registry and can be fixed or deleted. Raises ``CreateResultUnknown``
+        if the codes differ or the body has none.
+        """
+        codes = {f: str(body[f]) for f in ("model", "sku") if body.get(f)}
+        if not codes:
+            raise CreateResultUnknown(f"no model or sku to check product {product_id} against")
+        data = await self.get_product(product_id)
+        product = data.get("product") if isinstance(data, Mapping) else None
+        if not isinstance(product, Mapping):
+            raise CreateResultUnknown(f"product {product_id} is not readable")
+        differ = [f for f, want in codes.items() if str(product.get(f) or "") != want]
+        if differ:
+            raise CreateResultUnknown(
+                f"product {product_id} does not match the create body: {', '.join(differ)}"
+            )
         self._registry.add(
             CreatedProduct(product_id=product_id, created_at=self._now(), job_id=job_id)
         )
-        return product_id
 
     def _require_own(self, product_id: int) -> None:
         if not self._registry.is_active(product_id):

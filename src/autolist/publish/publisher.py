@@ -11,7 +11,13 @@ from typing import Any
 from autolist.core.blob_store import BlobStore
 from autolist.core.logging import get_logger, register_secret
 from autolist.core.models import ProductDraft, StoreConfig
-from autolist.publish.errors import DuplicateProduct, UnobservedField, VerifyMismatch
+from autolist.publish.errors import (
+    CreateResultUnknown,
+    DuplicateProduct,
+    StoreAPIError,
+    UnobservedField,
+    VerifyMismatch,
+)
 from autolist.publish.istores_client import IStoresClient
 from autolist.publish.verifier import created_problems
 
@@ -115,11 +121,45 @@ async def create_hidden(
         extra_url = blobs.signed_url(ref, config.publishing.image_url_ttl_s)
         register_secret(extra_url)
         extra_urls.append(extra_url)
-    product_id = await client.create_product(
-        build_body(draft, language_id, url, extra_urls), job_id=draft.job_id
-    )
+    codes = [c for c in (draft.model, draft.sku) if c is not None]
+    body = build_body(draft, language_id, url, extra_urls)
+    try:
+        product_id = await client.create_product(body, job_id=draft.job_id)
+    except (CreateResultUnknown, StoreAPIError) as exc:
+        if isinstance(exc, StoreAPIError) and not _maybe_created(exc):
+            raise
+        product_id = await _recover(client, page_size, codes, body, draft.job_id, exc)
     problems = created_problems(await client.get_product(product_id), draft, language_id)
     if problems:
         raise VerifyMismatch(product_id, problems)
     log.info("product created hidden and disabled", extra={"product_id": product_id})
+    return product_id
+
+
+def _maybe_created(exc: StoreAPIError) -> bool:
+    """A timeout (no status) or a 5xx: the POST may have created the product."""
+    return exc.status is None or exc.status >= 500
+
+
+async def _recover(
+    client: IStoresClient,
+    page_size: int,
+    codes: list[str],
+    body: Mapping[str, Any],
+    job_id: str | None,
+    exc: Exception,
+) -> int:
+    """After a create whose result is unknown: never POST again. The duplicate check just
+    before the POST found nothing with these codes, so a product that has them now came
+    from this POST. It is registered only if it is hidden, disabled and matches the body
+    (security review 22.11.2026, L2). Nothing found: the original error is raised."""
+    found = await find_duplicate(client, page_size, codes)
+    if found is None:
+        raise exc
+    product_id = int(str(found[2]))
+    await client.adopt_created(product_id, body, job_id)
+    log.warning(
+        "create result was unknown; the product was found by its codes and registered",
+        extra={"product_id": product_id, "cause": type(exc).__name__},
+    )
     return product_id

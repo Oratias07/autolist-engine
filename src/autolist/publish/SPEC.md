@@ -33,7 +33,7 @@ Base URL and Company ID from `store.yaml`. Headers on every request:
 |---|---|---|
 | GET | `/products/{limit}/{page}` | list |
 | GET | `/products/{id}` | read |
-| POST | `/products` | create. Body must contain `hidden: 1` **and `status: 0`** (amended 2026-11-02), else `UnsafeCreate`. Response is text like `productID: 970`: parse with regex. If parsing fails, raise `CreateResultUnknown` (the caller then searches by SKU). Never auto-retried. |
+| POST | `/products` | create. Body must contain `hidden: 1` **and `status: 0`** (amended 2026-11-02), else `UnsafeCreate`. Response is text like `productID: 970`. The id is accepted only if the answer holds exactly one id and, when it is a JSON object, no `success` other than `true`; then a GET must show the body's model and SKU before the id enters the registry (`adopt_created`; the body must carry at least one of them). Anything else raises `CreateResultUnknown` and registers nothing (security review 22.11.2026, L1). Never auto-retried. |
 | PUT | `/products/{id}` | only if `id` is in the `created_products` registry, else `ForeignProductError` |
 | DELETE | `/products/{id}` | same guard. Used only by P0 cleanup and tests. |
 | GET | `/categories`, `/categories/{id}` | read-only (paths from apidocs, read 2026-11-02) |
@@ -138,6 +138,7 @@ Brought forward from phase 8, create-and-verify only. Unhide, locking and reply-
 1. Duplicate check: scan the catalog pages for the same `sku` (only when known) or `model` (the playbook's `unique_check`; no server-side search is recorded in the field map). A hit raises `DuplicateProduct`, and nothing is created.
 2. Sign the main image with `core.blob_store.signed_url(ref, ttl)`. The TTL comes from `store.yaml` (`publishing.image_url_ttl_s`). The URL is never logged.
 3. `client.create_product(body)` with `hidden: 1`, `status: 0` and only fields recorded in the store repo field map.
+   - If the result is unknown (`CreateResultUnknown`, a timeout, or a 5xx), there is no second POST. The catalog is searched by the draft's model and SKU. Since the duplicate check just before found nothing, a match came from this POST, and it is registered through `adopt_created`. Nothing found: the original error is raised. A 4xx is not recovered (L2).
 4. `verifier.verify_created(product_id, draft)` (below).
 5. On a verify mismatch, the product stays hidden and disabled, and `VerifyMismatch` lists the fields. Nothing is auto-deleted or auto-retried.
 
