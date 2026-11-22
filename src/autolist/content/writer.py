@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from autolist.content.sanitizer import sanitize
 from autolist.core.facts import DETAIL
 from autolist.core.models import JobFact, ListingText
+from autolist.core.playbook import require
 from autolist.llm.client import LLMClient, LLMRequest
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
@@ -189,10 +190,23 @@ def write_listing(
         raise TypeError("writer prompts returned no parsed result")
     body_html, body_text = render(d.parsed, playbook["description"]["sections"])
     open_points = list(dict.fromkeys([*t.parsed.open_points, *d.parsed.open_points]))
+    title = t.parsed.title.strip()
+    problems = check(by_id, t.parsed, d.parsed)
+    if too_long(title, playbook):
+        problems.append(f"title is {len(title)} characters, over the playbook's max_length")
     return ListingText(
-        title=t.parsed.title.strip(),
+        title=title,
         description_html=body_html,
         description_text=body_text,
         open_points=open_points,
-        problems=check(by_id, t.parsed, d.parsed),
+        problems=problems,
     )
+
+
+def title_max_length(playbook: dict[str, Any]) -> int:
+    """``title.max_length.value``; ``ConfigMissing`` when it is not set (never a default)."""
+    return int(require(playbook, "title.max_length.value"))
+
+
+def too_long(title: str, playbook: dict[str, Any]) -> bool:
+    return len(title) > title_max_length(playbook)

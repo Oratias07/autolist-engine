@@ -196,3 +196,17 @@ async def test_a_name_without_quotation_marks_runs_to_the_end_of_its_line() -> N
         ),
     )
     assert _job(rig, "T-1").versions[-1].title == "כיסא מנהלים יוקרתי דגם C1"
+
+
+async def test_a_name_longer_than_max_length_is_not_cut_the_owner_is_asked() -> None:
+    rig = await _two()
+    name = "כיסא " + "א" * 120  # 125 characters, over max_length 120
+    out = await _reply(
+        rig, "T-1", f'שם: "{name}"', classified("facts", name=q(f'"{name}"', f'"{name}"'))
+    )
+    assert out["reply"] == "title_too_long"
+    job = _job(rig, "T-1")
+    assert len(job.versions) == 1 and job.fact("title_override") is None
+    mail = _job_mails(rig, "T-1")[-1]
+    assert mail.template == "needs_info"
+    assert "_title_too_long" in mail.variables["questions_list"]

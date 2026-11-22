@@ -10,8 +10,8 @@
 
 from __future__ import annotations
 
-from autolist.content.writer import write_listing, writer_facts
-from autolist.core.facts import as_title_override, present_keys
+from autolist.content.writer import title_max_length, too_long, write_listing, writer_facts
+from autolist.core.facts import TITLE_OVERRIDE, as_title_override, present_keys
 from autolist.core.models import ChannelMessage, Job, JobState, ReplyClassification
 from autolist.core.playbook import require
 from autolist.core.state_machine import transition
@@ -27,6 +27,8 @@ from autolist.orchestrator.runtime import (
     to_owner,
 )
 from autolist.orchestrator.sale_step import sale_blocked, sale_not_below, sale_questions
+
+TITLE_TOO_LONG = "_title_too_long"
 
 
 def missing_required(rt: Runtime, job: Job) -> list[str]:
@@ -93,6 +95,18 @@ async def apply_facts(
 
     # AWAITING_APPROVAL: a name is the owner's exact title from now on (DEV 22.11.2026)
     c = c.model_copy(update={"facts": as_title_override(c.facts, msg.text)})
+    named = next((f for f in c.facts if f.key == TITLE_OVERRIDE), None)
+    if named is not None and too_long(named.value, rt.playbook):
+        # never cut the owner's own name: he shortens it (DEV 22.11.2026, max_length 120)
+        limit = str(title_max_length(rt.playbook))
+        rt.jobs.save(job)
+        _ask(
+            rt,
+            job,
+            msg,
+            [rt.fragment(TITLE_TOO_LONG, {"max": limit, "length": str(len(named.value))})],
+        )
+        return {"job_id": job.job_id, "reply": "title_too_long"}
     merged = job.model_copy(update={"facts": [*job.facts, *c.facts]})
     if not c.facts and lifestyle is None:
         _ask(rt, job, msg, [*unverified, *extra])

@@ -46,7 +46,7 @@ PLAYBOOK: dict[str, Any] = {
     "stock": {"subtract": True},
     "images": {"lifestyle_people": False, "added_text_or_logo": "forbidden"},
     "categories": {"never_auto": [9], "max_per_product": 2},
-    "title": {"pattern": "x"},
+    "title": {"pattern": "x", "max_length": {"value": 120}},
     "description": {"sections": SECTIONS},
 }
 LABELS = {
