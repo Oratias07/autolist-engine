@@ -87,6 +87,7 @@ VALID_STORE: dict[str, Any] = {
         "approval_token_ttl_hours": 72,
         "job_id_prefix": "T-",
         "max_products_per_email": 10,
+        "max_agent_emails_per_thread": 30,
         "first_job_number": 1,
         "job_step_timeout_s": 600,
         "developer_contact": "dev@example.com",

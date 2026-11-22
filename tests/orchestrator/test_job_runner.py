@@ -369,3 +369,17 @@ async def test_a_store_sku_equal_to_the_owner_model_is_a_duplicate() -> None:
     dup = rig.mail.sent[-1]
     assert dup.template == "duplicate_found" and dup.variables["match_field"] == "item-code-label"
     assert rig.llm.prompts == ["extract_request"]
+
+
+async def test_a_thread_past_the_mail_cap_gets_no_more_answers() -> None:
+    """Security review 22.11.2026 (M1): a runaway thread stops, the developer is told."""
+    rig = _rig(extraction([item()]))
+    await _email(rig)
+    await _generate(rig)
+    agent = rig.config.agent.model_copy(update={"max_agent_emails_per_thread": 2})
+    rig.rt.config = rig.config.model_copy(update={"agent": agent})
+    before = len(rig.mail.sent)
+    rig.messages["g9"] = email("מה המצב?", thread="t0", photos=0)
+    out = await run_task(rig.rt, {"event": "email_received", "gmail_id": "g9"})
+    assert out == {"skipped": True, "reason": "thread_mail_cap"}
+    assert [m.template for m in rig.mail.sent[before:]] == ["developer_alert"]

@@ -5,7 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 WATCH_LABELS = ["INBOX"]
-_HEADER_NAMES = ["From", "Subject", "Message-ID", "Authentication-Results", "Date"]
+_HEADER_NAMES = [
+    "From",
+    "Subject",
+    "Message-ID",
+    "Authentication-Results",
+    "Date",
+    # automatic replies are dropped (security review 22.11.2026, M1: no mail loops)
+    "Auto-Submitted",
+    "Precedence",
+    "X-Autoreply",
+    "X-Autorespond",
+]
 
 
 def start_watch(service: Any, topic_path: str) -> dict[str, str]:

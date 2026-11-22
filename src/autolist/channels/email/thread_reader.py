@@ -25,6 +25,12 @@ def thread_has_agent_message(service: Any, thread_id: str) -> bool:
     return any("SENT" in (m.get("labelIds") or []) for m in res.get("messages", []) or [])
 
 
+def agent_message_count(service: Any, thread_id: str) -> int:
+    """How many emails the agent sent in this thread."""
+    res = service.users().threads().get(userId="me", id=thread_id, format="minimal").execute()
+    return sum("SENT" in (m.get("labelIds") or []) for m in res.get("messages", []) or [])
+
+
 def owner_messages(
     service: Any, thread_id: str, *, config: EmailChannelConfig, max_bytes: int
 ) -> list[ChannelMessage]:

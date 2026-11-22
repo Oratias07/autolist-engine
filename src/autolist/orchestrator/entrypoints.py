@@ -61,20 +61,30 @@ def create_app(deps: Deps) -> Starlette:
             return JSONResponse({"error": "not a pub/sub push"}, status_code=400)
         # blocking Gmail and Firestore calls run off the event loop, so a long job step in
         # another request never delays the push acknowledgement
-        accepted = await run_in_threadpool(
+        accepted, latest = await run_in_threadpool(
             poll_accepted, deps.gmail(), email, deps.state, deps.processed, deps.now()
         )
-        for msg in accepted:
-            task = deps.queue.enqueue(
-                JOB_TASK_PATH,
-                {
-                    "event": "email_received",
-                    "gmail_id": msg.message_id,
-                    "thread_id": msg.thread_id,
-                    "rfc_message_id": msg.rfc_message_id,
-                },
-            )
-            deps.processed.set_outcome(msg.message_id, "queued", task=task)
+        queued = 0
+        try:
+            for msg in accepted:
+                task = deps.queue.enqueue(
+                    JOB_TASK_PATH,
+                    {
+                        "event": "email_received",
+                        "gmail_id": msg.message_id,
+                        "thread_id": msg.thread_id,
+                        "rfc_message_id": msg.rfc_message_id,
+                    },
+                )
+                deps.processed.set_outcome(msg.message_id, "queued", task=task)
+                queued += 1
+        except Exception:
+            # not queued: released, and the cursor stays, so Pub/Sub's retry handles them
+            for msg in accepted[queued:]:
+                deps.processed.release(msg.message_id)
+            raise
+        if latest is not None:
+            deps.state.set_history_id(latest)
         return JSONResponse({"accepted": len(accepted)})
 
     async def cron_renew_watch(_: Request) -> JSONResponse:

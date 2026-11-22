@@ -155,6 +155,7 @@ class AgentConfig(_Strict):
     approval_token_ttl_hours: int = Field(gt=0)
     job_id_prefix: str = Field(min_length=1)  # e.g. "YTS-"
     max_products_per_email: int = Field(gt=0)
+    max_agent_emails_per_thread: int = Field(gt=0)  # security review M1, 22.11.2026
     first_job_number: int = Field(gt=0)
     job_step_timeout_s: int = Field(gt=0, le=3000)  # active work limit per job step
     developer_contact: str | None  # shown to the owner in receipts; gets failure alerts
