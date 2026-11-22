@@ -131,7 +131,7 @@ def email(
         {"mimeType": "text/plain", "filename": "", "body": {"data": _b(text.encode())}}
     ]
     for i in range(photos):
-        data = png()
+        data = png(("red", "green", "blue", "white")[i % 4])  # each photo is different
         parts.append(
             {
                 "mimeType": "image/png",

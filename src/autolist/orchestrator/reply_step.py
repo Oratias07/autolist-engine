@@ -25,7 +25,12 @@ from autolist.core.models import (
 )
 from autolist.core.sale import without_sale
 from autolist.core.state_machine import FINAL, transition
-from autolist.orchestrator.generate_step import job_photos, lifestyle_failed, lifestyle_image
+from autolist.orchestrator.generate_step import (
+    job_photos,
+    keep_preview_images,
+    lifestyle_failed,
+    lifestyle_image,
+)
 from autolist.orchestrator.new_version import limit_reached, new_version
 from autolist.orchestrator.reply_facts import apply_facts, missing_required
 from autolist.orchestrator.runtime import (
@@ -208,6 +213,7 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
             return _status(rt, job, msg)
         job = transition(job, JobState.CANCELLED, rt.now(), error="cancelled by the owner")
         rt.jobs.save(job)
+        keep_preview_images(rt, job)  # sending the product again reuses them (one day)
         _job_mail(rt, job, msg, "cancelled")
         return {"job_id": job.job_id, "reply": "cancelled"}
     if command in ("image_1", "image_2"):

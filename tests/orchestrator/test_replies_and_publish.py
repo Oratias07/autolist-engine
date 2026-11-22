@@ -65,7 +65,9 @@ async def test_approve_then_publish_hidden_disabled_with_generated_image() -> No
     done = rig.mail.sent[-1]
     assert done.template == "saved_hidden" and done.thread_id == "t0"
     assert done.variables["istores_product_id"] == "970" and done.variables["version"] == "1"
-    assert rig.blobs.objects == {}  # the uploaded image is deleted after the create
+    assert not [
+        n for n in rig.blobs.objects if not n.startswith("image-reuse/")
+    ]  # the uploaded image is deleted after the create
 
 
 async def test_approve_of_an_older_version_does_not_publish() -> None:
@@ -173,7 +175,7 @@ async def test_verify_mismatch_fails_job_and_keeps_product_hidden() -> None:
     job = _job(rig)
     assert job.state == S.FAILED and "970" in (job.error or "")
     assert rig.mail.templates()[-2:] == ["failed", "developer_alert"]
-    assert rig.blobs.objects == {}
+    assert not [n for n in rig.blobs.objects if not n.startswith("image-reuse/")]
 
 
 async def test_publish_refuses_a_preview_not_sent_by_the_agent() -> None:
