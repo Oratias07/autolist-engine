@@ -42,6 +42,7 @@ PROMPTS_IN_USE = (
 )
 REPLIES_IN_USE = (
     "_category_none",
+    "_unclear_question",
     "cancel_which",
     "cancelled_list",
     "_thread_subject",
