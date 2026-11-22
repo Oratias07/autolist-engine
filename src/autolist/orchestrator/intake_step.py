@@ -14,6 +14,7 @@ from autolist.core.models import ChannelMessage, Job, JobState, ParsedRequest, P
 from autolist.core.playbook import require
 from autolist.core.state_machine import transition
 from autolist.intake.request_parser import parse_request
+from autolist.orchestrator.cancel_step import cancel_by_text
 from autolist.orchestrator.duplicate_check import cancel_if_duplicate
 from autolist.orchestrator.runtime import (
     JOB_TASK_PATH,
@@ -98,6 +99,8 @@ async def handle_new_email(rt: Runtime, msg: ChannelMessage) -> list[str]:
     """Returns the job ids opened (none for the no-job cases)."""
     receipt_jobs = rt.jobs.by_source_thread(msg.thread_id)
     if receipt_jobs:
+        if cancel_by_text(rt, receipt_jobs, msg) is not None:
+            return []
         _reply(rt, msg, "reply_in_product_thread", {"jobs_lines": jobs_lines(receipt_jobs)})
         return []
 
