@@ -31,8 +31,6 @@ from autolist.publish.istores_client import IStoresClient
 from autolist.publish.registry import JsonFileRegistry
 
 NAME = "[TEST autolist] נא לא לגעת"
-CATEGORY = 97008  # "ציוד משרדי", observed in P0-05
-IMAGES = ("tape-001/store-main.jpg", "invoice-WF26352/images/H2201.jpeg")
 WATCHED = ("hidden", "status", "price", "category", "images", "special", "image")
 
 
@@ -58,6 +56,9 @@ def _base(sku: str, main_url: str) -> dict[str, Any]:
 async def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
+    # store data comes from the caller (the store repo's live task), never from this file
+    ap.add_argument("--category", type=int, required=True)
+    ap.add_argument("--images", nargs=2, required=True, help="two paths under fixtures/samples")
     args = ap.parse_args()
     configure_logging()
     cfg = load_store_config()
@@ -69,7 +70,7 @@ async def main() -> None:
     blobs = GcsBlobStore(cfg)
     refs = [
         blobs.put(f"p1-02/{stamp}/{i}.jpg", (samples / rel).read_bytes(), "image/jpeg")
-        for i, rel in enumerate(IMAGES)
+        for i, rel in enumerate(args.images)
     ]
     urls = [blobs.signed_url(r, cfg.publishing.image_url_ttl_s) for r in refs]
     for u in urls:
@@ -100,7 +101,7 @@ async def main() -> None:
             lines += [f"## product A {a}: documented create, then one field per PUT", ""]
             record("A-0-created", await client.get_product(a))
             for label, body in (
-                ("A-1-category", {"product_category": [CATEGORY]}),
+                ("A-1-category", {"product_category": [args.category]}),
                 ("A-2-images", {"images": extra}),
                 ("A-3-special", {"product_special": special}),
             ):
@@ -114,7 +115,7 @@ async def main() -> None:
                 record(label, await client.get_product(a))
             body_b = {
                 **_base("AUTOLIST-TEST-P1-02-B", urls[0]),
-                "product_category": [CATEGORY],
+                "product_category": [args.category],
                 "images": extra,
                 "product_special": special,
             }

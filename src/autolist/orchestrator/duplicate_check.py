@@ -3,7 +3,7 @@
 It runs right after extraction, and again after a NEEDS_INFO answer, so no paid text or image
 call is made for a product the store already has. ``publish.create_hidden`` checks once more
 before it creates. The owner's model and item code are each compared with the store's model
-and SKU (DEV 22.11.2026, after M2275 was missed: in the store its SKU, not its model, is M2275).
+and SKU (DEV 22.11.2026, after Q9001 was missed: in the store its SKU, not its model, is Q9001).
 """
 
 from __future__ import annotations

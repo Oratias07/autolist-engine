@@ -83,7 +83,7 @@ def renamed_title(name: JobFact, text: str) -> str:
     model's value (live 22.11.2026: the model dropped brackets and commas from the value).
 
     - inside quotation marks that hold the name's quote: that whole quoted text;
-    - otherwise: from the quote to the end of its line ("שם: כיסא מנהלים דגם M2275").
+    - otherwise: from the quote to the end of its line ("שם: כיסא מנהלים דגם Q9001").
     """
     quote = name.quote.strip(_QUOTES)
     for found in _QUOTED.finditer(text):

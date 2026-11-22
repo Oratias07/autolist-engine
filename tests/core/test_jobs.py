@@ -25,7 +25,7 @@ def store(request: pytest.FixtureRequest) -> Any:
 def _job(store: Any, index: int = 0) -> Any:
     return new_job(
         store,
-        prefix="YTS-",
+        prefix="JOB-",
         first_number=1001,
         source_gmail_id="g1",
         source_thread_id="t0",
@@ -36,7 +36,7 @@ def _job(store: Any, index: int = 0) -> Any:
 
 def test_numbers_start_at_first_and_increase(store: Any) -> None:
     a, b = _job(store), _job(store, 1)
-    assert (a.job_id, b.job_id) == ("YTS-1001", "YTS-1002")
+    assert (a.job_id, b.job_id) == ("JOB-1001", "JOB-1002")
     assert a.state == S.RECEIVED
     assert a.active_since == T0
 
@@ -47,8 +47,8 @@ def test_save_get_and_thread_index(store: Any) -> None:
     job = job.model_copy(update={"thread_id": "t9"})
     store.save(job)
     assert store.by_thread("t9") == job
-    assert store.get("YTS-1001") == job
-    assert store.get("YTS-9") is None
+    assert store.get("JOB-1001") == job
+    assert store.get("JOB-9") is None
 
 
 def test_open_jobs_excludes_final(store: Any) -> None:

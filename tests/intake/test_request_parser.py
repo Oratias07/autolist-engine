@@ -18,7 +18,7 @@ from autolist.llm.client import LLMRequest, LLMResult
 from tests.core.conftest import VALID_STORE
 
 REQUIRED = ["name", "price", "quantity", "model", "photo"]
-TEXT = 'כיסא מזכירה T8103 שחור, 449 ש"ח, מלאי 3'
+TEXT = 'כיסא מזכירה Q9003 שחור, 449 ש"ח, מלאי 3'
 
 
 def _png() -> bytes:
@@ -51,12 +51,12 @@ def _q(value: Any = None, quote: str | None = None) -> dict[str, Any]:
 
 def _item(**over: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "name": _q("כיסא מזכירה T8103 שחור", "כיסא מזכירה T8103 שחור"),
+        "name": _q("כיסא מזכירה Q9003 שחור", "כיסא מזכירה Q9003 שחור"),
         "price": _q("449", '449 ש"ח'),
         "sale_price": _q(),
         "quantity": _q(3, "מלאי 3"),
         "barcode": _q(),
-        "model": _q("T8103", "T8103"),
+        "model": _q("Q9003", "Q9003"),
         "keywords": _q(),
         "category_hint": _q(),
         "item_code": _q(),
@@ -105,10 +105,10 @@ def test_complete_request_has_quoted_facts_and_nothing_missing() -> None:
     res, llm = _run(_out([_item()]))
     item = res.items[0]
     assert {f.key: f.value for f in item.facts} == {
-        "name": "כיסא מזכירה T8103 שחור",
+        "name": "כיסא מזכירה Q9003 שחור",
         "price": "449",
         "quantity": "3",
-        "model": "T8103",
+        "model": "Q9003",
     }
     assert all(f.quote in TEXT and f.gmail_id == "g1" for f in item.facts)
     assert item.missing_required == []
@@ -162,11 +162,11 @@ def test_rejected_attachment_is_reported_and_not_sent() -> None:
 
 
 def test_item_code_and_details_with_exact_quotes() -> None:
-    text = TEXT + '\nמקט: 1571\nאורך 40 מ"מ, מיועדת לכל סוגי המשטחים'  # noqa: RUF001
+    text = TEXT + '\nמקט: 4242\nאורך 40 מ"מ, מיועדת לכל סוגי המשטחים'  # noqa: RUF001
     out = _out(
         [
             _item(
-                item_code=_q("1571", "מקט: 1571"),
+                item_code=_q("4242", "מקט: 4242"),
                 details=[
                     _q('אורך 40 מ"מ', 'אורך 40 מ"מ'),
                     _q("מיועדת לכל סוגי המשטחים", "מיועדת לכל סוגי המשטחים"),
@@ -178,7 +178,7 @@ def test_item_code_and_details_with_exact_quotes() -> None:
     )
     res, _ = _run(out, _msg(text))
     facts = [(f.key, f.value) for f in res.items[0].facts]
-    assert ("item_code", "1571") in facts
+    assert ("item_code", "4242") in facts
     assert [v for k, v in facts if k == "detail"] == ['אורך 40 מ"מ', "מיועדת לכל סוגי המשטחים"]
     assert res.items[0].unverified_fields == []
 

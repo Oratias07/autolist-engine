@@ -325,7 +325,7 @@ async def test_cost_alert_send_failure_does_not_fail_the_step() -> None:
 
 
 async def test_item_code_without_a_model_is_enough_and_fills_the_model_field() -> None:
-    """DEV 15.11.2026 (YTS-1002): a model or an item code is required, not both."""
+    """DEV 15.11.2026 (JOB-1002): a model or an item code is required, not both."""
     rig = Rig(extraction([item(model=q(), item_code=q("C1", "C1"))]))
     rig.messages["g1"] = email(EMAIL_TEXT)
     assert await _email(rig) == {"opened": ["T-1"]}
@@ -361,8 +361,8 @@ async def test_an_alert_that_cannot_be_sent_never_hides_the_real_failure() -> No
 
 
 async def test_a_store_sku_equal_to_the_owner_model_is_a_duplicate() -> None:
-    """DEV 22.11.2026: M2275 was missed because the store keeps it as model "Tenerife"."""
-    rig = _rig(extraction([item()]), catalog=[{"sku": "C1", "model": "Tenerife", "product_id": 78}])
+    """DEV 22.11.2026: Q9001 was missed because the store keeps it as model "Atlas"."""
+    rig = _rig(extraction([item()]), catalog=[{"sku": "C1", "model": "Atlas", "product_id": 78}])
     await _email(rig)
     job = rig.jobs.get("T-1")
     assert job is not None and job.state == S.CANCELLED and job.error == "duplicate sku"

@@ -271,8 +271,8 @@ async def test_approve_followed_by_text_after_a_signature_line_is_not_an_approva
 
 async def test_approve_with_the_owner_usual_signature_still_approves() -> None:
     rig = Rig(extraction([item()]))
-    rig.messages["g1"] = email(EMAIL_TEXT + "\n-- \nYTS-SIG www.example.com")
+    rig.messages["g1"] = email(EMAIL_TEXT + "\n-- \nOWNER-SIG www.example.com")
     await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
     await run_task(rig.rt, {"event": "generate", "job_id": "T-1"})
-    out = await _reply(rig, "מאשר\n-- \nYTS-SIG www.example.com")
+    out = await _reply(rig, "מאשר\n-- \nOWNER-SIG www.example.com")
     assert out["reply"] == "approved"

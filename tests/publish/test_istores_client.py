@@ -32,7 +32,7 @@ VISIBLE_OK = {
     "success": True,
     "product": {
         "price": 25,
-        "category": {"97008": [{"category_id": 97008, "name": "Office", "language_id": 3}]},
+        "category": {"5001": [{"category_id": 5001, "name": "Office", "language_id": 3}]},
         "product_description": {"3": {"name": "Item", "description": "<p>x</p>"}},
     },
 }

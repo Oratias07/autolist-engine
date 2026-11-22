@@ -255,29 +255,29 @@ async def test_stock_management_is_sent() -> None:
 async def test_categories_are_sent_and_verified() -> None:
     blobs = InMemoryBlobStore()
     store = Store()
-    await _run(store, _draft(blobs, category_ids=[97008]), blobs)
-    assert store.posted is not None and store.posted["product_category"] == [97008]
+    await _run(store, _draft(blobs, category_ids=[5001]), blobs)
+    assert store.posted is not None and store.posted["product_category"] == [5001]
 
 
 async def test_a_missing_category_on_the_store_fails_the_verify() -> None:
     blobs = InMemoryBlobStore()
     with pytest.raises(VerifyMismatch, match="categories"):
-        await _run(Store(category={}), _draft(blobs, category_ids=[97008]), blobs)
+        await _run(Store(category={}), _draft(blobs, category_ids=[5001]), blobs)
 
 
 @pytest.mark.parametrize(
     ("catalog", "codes", "found"),
     [
-        # DEV 22.11.2026: M2275 is in the store as model "Tenerife", SKU "M2275"
-        ([{"product_id": 7, "model": "Tenerife", "sku": "M2275"}], ["M2275"], ("sku", "M2275", 7)),
-        ([{"product_id": 7, "model": " m2275 ", "sku": ""}], ["M2275"], ("model", " m2275 ", 7)),
+        # DEV 22.11.2026: Q9001 is in the store as model "Atlas", SKU "Q9001"
+        ([{"product_id": 7, "model": "Atlas", "sku": "Q9001"}], ["Q9001"], ("sku", "Q9001", 7)),
+        ([{"product_id": 7, "model": " q9001 ", "sku": ""}], ["Q9001"], ("model", " q9001 ", 7)),
         (
-            [{"product_id": 7, "model": "x", "sku": "301498"}],
-            ["C1", "301498"],
-            ("sku", "301498", 7),
+            [{"product_id": 7, "model": "x", "sku": "500100"}],
+            ["C1", "500100"],
+            ("sku", "500100", 7),
         ),
-        ([{"product_id": 7, "model": "T8103LG", "sku": "T8103LG"}], ["T8103"], None),  # a variant
-        ([{"product_id": 7, "model": "", "sku": ""}], ["M2275"], None),
+        ([{"product_id": 7, "model": "Q9003LG", "sku": "Q9003LG"}], ["Q9003"], None),  # a variant
+        ([{"product_id": 7, "model": "", "sku": ""}], ["Q9001"], None),
     ],
 )
 async def test_duplicate_matches_any_owner_code_against_model_or_sku(

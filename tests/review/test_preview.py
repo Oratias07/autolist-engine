@@ -18,7 +18,7 @@ def _f(key: str, value: str) -> JobFact:
 
 def _job(printed_text: bool | None = False, **over: Any) -> Job:
     data: dict[str, Any] = {
-        "job_id": "YTS-1001",
+        "job_id": "JOB-1001",
         "number": 1001,
         "state": JobState.GENERATING,
         "source_gmail_id": "g1",

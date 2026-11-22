@@ -120,7 +120,7 @@ def test_every_mail_carries_a_send_id(email_cfg: EmailChannelConfig) -> None:
 def test_a_send_that_timed_out_but_was_sent_is_found_and_never_sent_twice(
     email_cfg: EmailChannelConfig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """YTS-1007 (22.11.2026). Gmail replaces the Message-ID (alert test 22.11), so the mail
+    """JOB-1007 (22.11.2026). Gmail replaces the Message-ID (alert test 22.11), so the mail
     is found by our own send id among the newest sent to the same recipient."""
     monkeypatch.setattr("autolist.channels.email.mail_sender.uuid.uuid4", lambda: _FixedId)
     gmail = FakeGmail(
@@ -152,7 +152,7 @@ def test_a_send_that_timed_out_and_is_not_in_sent_still_fails(
 def test_a_read_back_that_keeps_timing_out_does_not_fail_a_sent_mail(
     email_cfg: EmailChannelConfig,
 ) -> None:
-    """YTS-1007 (22.11.2026): the preview was sent and the read-back timed out."""
+    """JOB-1007 (22.11.2026): the preview was sent and the read-back timed out."""
     gmail = FakeGmail({"send": {"id": "g-1"}, "get": [TimeoutError("timed out")] * 4})
     sender = GmailSender(gmail, email_cfg, REPLIES, sleep=lambda _s: None)
     sent = sender.deliver(_msg(thread_id="t-9"))

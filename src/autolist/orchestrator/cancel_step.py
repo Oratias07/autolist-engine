@@ -1,4 +1,4 @@
-"""Cancel in free wording (DEV 22.11.2026): "בטל את שני המוצרים", "בטל את H2256".
+"""Cancel in free wording (DEV 22.11.2026): "בטל את שני המוצרים", "בטל את Q9002".
 
 The list is every job of the same owner email, so a cancel in any of its threads can name
 any of them. Only jobs waiting for the owner (NEEDS_INFO, AWAITING_APPROVAL) are cancelled.
