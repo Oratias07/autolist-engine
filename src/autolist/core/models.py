@@ -12,9 +12,14 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from autolist.core.errors import ConfigMissing
+from autolist.core.model_text import clean_question, clean_title
+
+# text a model wrote or an email carried, cleaned on the way in (security review 22.11.2026)
+Title = Annotated[str, AfterValidator(clean_title)]
+ModelQuestion = Annotated[str, AfterValidator(clean_question)]
 
 
 class _Strict(BaseModel):
@@ -401,7 +406,7 @@ class JobVersion(_Strict):
 
     number: int = Field(gt=0)
     created_at: datetime
-    title: str
+    title: Title
     description_html: str
     description_text: str  # the same text as plain lines, for a later preview of this version
     open_points: list[str] = Field(default_factory=list)  # shown again in a later preview
@@ -429,13 +434,13 @@ class CategoryChoice(_Strict):
 
     category_ids: list[int]  # empty: none chosen (unclear); the owner sets it
     names: list[str]
-    question: str
+    question: ModelQuestion
 
 
 class ListingText(_Strict):
     """Title and description for one product, written only from its facts."""
 
-    title: str
+    title: Title
     description_html: str  # rendered in code from the playbook sections, then sanitized
     description_text: str  # the same content as plain lines, for the preview email
     open_points: list[str]  # things the writer could not decide; shown, never filled in
@@ -457,7 +462,7 @@ class ReplyClassification(_Strict):
     facts: list[JobFact]  # only values whose quote is an exact substring of the reply
     unverified_fields: list[str]  # values given without an exact quote: dropped, asked
     also_wording_or_image: bool
-    question: str  # Hebrew, from the model; empty when none
+    question: ModelQuestion  # Hebrew, from the model; empty when none
     lifestyle_requested: bool = False
 
 
@@ -514,9 +519,14 @@ class ParsedRequest(_Strict):
     items: list[ProductRequest]
     clearly_separated: bool
     unassigned_photos: list[int]
-    questions: list[str]  # Hebrew, from the model plus the parser's own
+    questions: list[ModelQuestion]  # Hebrew, from the model plus the parser's own
     rejected_attachments: list[str]  # file names refused by the guard, with the reason
     accepted_images: list[ReferenceImage]  # the guarded, downscaled photos, in index order
+
+    @field_validator("questions")
+    @classmethod
+    def _drop_empty(cls, questions: list[str]) -> list[str]:
+        return [q for q in questions if q]  # a question that was only a link is gone
 
 
 # ---------------------------------------------------------------- channels
