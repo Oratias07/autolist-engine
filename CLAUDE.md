@@ -89,6 +89,8 @@ This repo is the **engine**. It contains no client data: no names, IDs, addresse
 5. Run `make check` (ruff, mypy --strict, pytest, lint-imports, pip-audit). All must pass.
 6. Update docs (see rule 4). Mark the task `done` in the store repo's phase file, with a one-line note of what was verified and how.
 7. Commit with message `<module>: <what changed>` and the task ID, e.g. `publish: rate limiter honors Retry-After (P0-04)`. Do not push to `main` directly. Open a PR.
+   - `main` is protected: a PR, and the `check`, `secrets` and `image` checks, are required. No direct push, no force push.
+   - Who merges (DEV 22.11.2026): the developer merges, in GitHub, every PR that touches `.github/`, `infra/`, `publish/`, the approval flow, or the store's secrets or publishing switch. Claude opens it, waits for the checks, sends the link and stops. Claude merges the rest after the checks pass and the developer agrees in chat.
 
 ## Stack
 Python 3.12 · uv · Pydantic v2 · httpx · Google Cloud (Cloud Run, Pub/Sub, Cloud Tasks, Scheduler, Firestore, Cloud Storage, Secret Manager) · Anthropic API (text) · Gemini API, Nano Banana (images) · pytest · ruff · mypy · import-linter · pip-audit.
