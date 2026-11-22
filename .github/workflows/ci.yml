@@ -9,16 +9,16 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0 }
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@caf0cab7a618c569241d31dcd442f54681755d39 # v3
       - run: uv python install 3.12
       - run: uv sync --frozen
       - run: make check
   secrets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { fetch-depth: 0 }
       - name: gitleaks (pinned binary, checksum-verified)
         env:
@@ -34,8 +34,16 @@ jobs:
     # that the app module imports; the real store is added only by the store repo's deploy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { path: engine }
       - run: mkdir -p store
       - run: docker build -f engine/Dockerfile -t autolist-ci .
       - run: docker run --rm --entrypoint python autolist-ci -c "import autolist.orchestrator.main, autolist.orchestrator.entrypoints; print('import ok')"
+      - name: The service user cannot change its code or store files (L8)
+        run: |
+          docker run --rm --entrypoint sh autolist-ci -c '
+            id -u | grep -qx 10001 || { echo "not the service user"; exit 1; }
+            for p in /app/store /app/src /app/.venv; do
+              if touch "$p/.probe" 2>/dev/null; then echo "$p is writable"; exit 1; fi
+            done
+            echo "read-only ok"'
