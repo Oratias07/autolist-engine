@@ -20,7 +20,7 @@ import httpx
 from PIL import Image
 
 from autolist.core.cost_ledger import CostLedger
-from autolist.core.errors import ConfigInvalid
+from autolist.core.errors import ConfigInvalid, ConfigMissing
 from autolist.core.logging import get_logger, register_secret
 from autolist.core.models import (
     CostEntry,
@@ -103,6 +103,11 @@ class GeminiImageGenerator:
             raise ConfigInvalid(
                 f"images.prices.{req.model}.per_image_usd.{size}", "no price for this size"
             )
+        # the image models think by default and bill it as text output (#31): no call without
+        # that price, so the ledger never misses it
+        text_rate = prices.text_output_usd_per_mtok
+        if text_rate is None:
+            raise ConfigMissing(f"images.prices.{req.model}.text_output_usd_per_mtok")
         per_ref: int = self._config.require("images.est_input_tokens_per_reference")
         text = render(load_prompt(req.prompt_name, self._prompts_dir), req.variables)
 
@@ -139,9 +144,11 @@ class GeminiImageGenerator:
         image, mime, texts, finish = self._read(data)
         usage = data.get("usageMetadata")
         prompt_tokens = usage.get("promptTokenCount") if isinstance(usage, dict) else None
-        if image is not None and isinstance(prompt_tokens, int):
+        if image is not None and isinstance(usage, dict) and isinstance(prompt_tokens, int):
+            text_tokens, exact = _text_output_tokens(usage)
             usd = per_image + prices.input_usd_per_mtok * prompt_tokens / _MTOK
-            estimated = False
+            usd += text_rate * text_tokens / _MTOK
+            estimated = not exact
         else:
             # no usage data, or no image (text-only output is not priced in store.yaml):
             # record the pre-call estimate, which is an upper bound for the caps
@@ -248,3 +255,22 @@ def _error_message(r: httpx.Response) -> str:
         return str(r.json().get("error", {}).get("message", ""))[:300]
     except ValueError:
         return r.text[:300]
+
+
+def _text_output_tokens(usage: dict[str, Any]) -> tuple[int, bool]:
+    """Thinking plus text output tokens, billed apart from the image (fields observed in P0-10).
+
+    Without the per-modality detail the whole candidate count is charged at the text rate:
+    an upper bound for the caps, recorded as estimated."""
+    thoughts = usage.get("thoughtsTokenCount")
+    total = thoughts if isinstance(thoughts, int) else 0
+    details = usage.get("candidatesTokensDetails")
+    if isinstance(details, list):
+        total += sum(
+            int(d.get("tokenCount") or 0)
+            for d in details
+            if isinstance(d, dict) and d.get("modality") == "TEXT"
+        )
+        return total, True
+    candidates = usage.get("candidatesTokenCount")
+    return total + (candidates if isinstance(candidates, int) else 0), False

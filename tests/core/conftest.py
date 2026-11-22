@@ -65,7 +65,11 @@ VALID_STORE: dict[str, Any] = {
         "bakeoff_candidates": ["image-model-a"],
         "est_input_tokens_per_reference": 1000,
         "prices": {
-            "image-model-a": {"input_usd_per_mtok": "1.00", "per_image_usd": {"2K": "0.05"}}
+            "image-model-a": {
+                "input_usd_per_mtok": "1.00",
+                "per_image_usd": {"2K": "0.05"},
+                "text_output_usd_per_mtok": "10.00",
+            }
         },
         "output_px": 1200,
         "variations_per_role": 2,

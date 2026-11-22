@@ -27,7 +27,6 @@ from autolist.core.sale import without_sale
 from autolist.core.state_machine import FINAL, transition
 from autolist.orchestrator.generate_step import (
     job_photos,
-    keep_preview_images,
     lifestyle_failed,
     lifestyle_image,
 )
@@ -135,9 +134,10 @@ def _lifestyle_add(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, str]
         return {"job_id": job.job_id, "reply": "lifestyle_noted"}
     if limit_reached(rt, job, msg):
         return {"job_id": job.job_id, "reply": "revision_limit"}
+    fresh = job.versions[-1].lifestyle  # asked again while one is attached: a new one
     job = job.model_copy(update={"lifestyle_requested": True})
     rt.jobs.save(job)
-    image = lifestyle_image(rt, job, job_photos(rt, job))
+    image = lifestyle_image(rt, job, job_photos(rt, job), fresh=fresh)
     if image is None:
         lifestyle_failed(rt, job, msg.rfc_message_id)
         return {"job_id": job.job_id, "reply": "lifestyle_failed"}
@@ -213,7 +213,6 @@ async def handle_reply(rt: Runtime, job: Job, msg: ChannelMessage) -> dict[str, 
             return _status(rt, job, msg)
         job = transition(job, JobState.CANCELLED, rt.now(), error="cancelled by the owner")
         rt.jobs.save(job)
-        keep_preview_images(rt, job)  # sending the product again reuses them (one day)
         _job_mail(rt, job, msg, "cancelled")
         return {"job_id": job.job_id, "reply": "cancelled"}
     if command in ("image_1", "image_2"):

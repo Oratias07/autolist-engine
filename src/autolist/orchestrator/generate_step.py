@@ -7,8 +7,6 @@ to image 1) -> preview -> AWAITING_APPROVAL. A paid call that fails is not repea
 
 from __future__ import annotations
 
-from autolist.channels.email.mail_sender import MAX_OUT_ATTACHMENT_BYTES
-from autolist.channels.email.own_attachment import fetch_own_attachment
 from autolist.content.writer import write_listing
 from autolist.core.errors import ConfigMissing
 from autolist.core.logging import get_logger
@@ -25,7 +23,7 @@ from autolist.images.errors import BillingRequired, ImageError
 from autolist.images.postprocess import postprocess
 from autolist.intake.attachment_guard import guard
 from autolist.orchestrator.category_step import choose_for
-from autolist.orchestrator.image_reuse import keep, reuse_key, reused
+from autolist.orchestrator.image_reuse import reused_image
 from autolist.orchestrator.intake_step import read
 from autolist.orchestrator.runtime import (
     Runtime,
@@ -37,7 +35,7 @@ from autolist.orchestrator.runtime import (
     send,
     to_owner,
 )
-from autolist.review.preview import IMAGE_NAMES, LIFESTYLE_NAME, build_preview
+from autolist.review.preview import build_preview
 
 log = get_logger(__name__)
 MAX_REFERENCES = 4  # ImageRequest limit
@@ -59,8 +57,8 @@ def job_photos(rt: Runtime, job: Job) -> list[ReferenceImage]:
 
 
 def _image_2(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> bytes | None:
-    key = reuse_key(rt, "main", "image_main", photos[:MAX_REFERENCES])
-    if (same := reused(rt, key, job)) is not None:
+    same = reused_image(rt, job, "main", photos, lambda j: job_photos(rt, j), MAX_REFERENCES)
+    if same is not None:
         return same
     name, model = job.fact("name"), job.fact("model")
     facts = "\n".join(f"{f.key}: {f.value}" for f in (name, model) if f is not None)
@@ -83,9 +81,7 @@ def _image_2(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> bytes | Non
         alert_developer(rt, job.job_id, "image_fallback", job.state, str(exc))
         return None
     px: int = rt.config.require("images.output_px")
-    out = postprocess(img.data, px)
-    keep(rt, key, out, job)
-    return out
+    return postprocess(img.data, px)
 
 
 def scene_rules(playbook: dict[str, object]) -> str:
@@ -101,11 +97,18 @@ def scene_rules(playbook: dict[str, object]) -> str:
     return "\n".join(rules)
 
 
-def lifestyle_image(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> bytes | None:
-    """The lifestyle image the owner asked for (DEV 15.11.2026), or None when it failed."""
-    key = reuse_key(rt, "lifestyle", "image_lifestyle", photos[:MAX_REFERENCES])
-    if (same := reused(rt, key, job)) is not None:
-        return same
+def lifestyle_image(
+    rt: Runtime, job: Job, photos: list[ReferenceImage], *, fresh: bool = False
+) -> bytes | None:
+    """The lifestyle image the owner asked for (DEV 15.11.2026), or None when it failed.
+
+    ``fresh``: a new one even when an earlier job made one from the same photos."""
+    if not fresh:
+        same = reused_image(
+            rt, job, "lifestyle", photos, lambda j: job_photos(rt, j), MAX_REFERENCES
+        )
+        if same is not None:
+            return same
     facts = "\n".join(
         f"{f.key}: {f.value}" for f in job.facts if f.key in ("name", "model", "detail")
     )
@@ -132,9 +135,7 @@ def lifestyle_image(rt: Runtime, job: Job, photos: list[ReferenceImage]) -> byte
         alert_developer(rt, job.job_id, "lifestyle_failed", job.state, str(exc))
         return None
     px: int = rt.config.require("images.output_px")
-    out = postprocess(img.data, px)
-    keep(rt, key, out, job)
-    return out
+    return postprocess(img.data, px)
 
 
 def lifestyle_failed(rt: Runtime, job: Job, in_reply_to: str | None) -> Job:
@@ -225,33 +226,3 @@ async def generate(rt: Runtime, job: Job) -> Job:
         job = lifestyle_failed(rt, job, sent.rfc_message_id)
         rt.jobs.save(job)
     return job
-
-
-def keep_preview_images(rt: Runtime, job: Job) -> None:
-    """A cancelled job keeps the images of its latest preview for one day (DEV 22.11.2026)."""
-    if not job.versions:
-        return
-    version = job.versions[-1]
-    preview_id = version.preview_gmail_id
-    if preview_id is None:
-        return
-    wanted: list[tuple[str, str, str]] = []
-    if 2 in version.image_options:
-        wanted.append(("main", "image_main", IMAGE_NAMES[2]))
-    if version.lifestyle:
-        wanted.append(("lifestyle", "image_lifestyle", LIFESTYLE_NAME))
-    if not wanted:
-        return
-    try:
-        photos = job_photos(rt, job)[:MAX_REFERENCES]
-        for role, prompt, filename in wanted:
-            data = fetch_own_attachment(
-                rt.gmail(),
-                preview_id,
-                filename,
-                config=rt.config.channels.email,
-                max_bytes=MAX_OUT_ATTACHMENT_BYTES,
-            )
-            keep(rt, reuse_key(rt, role, prompt, photos), data, job)
-    except Exception:  # cancelling never fails because of this; it only costs a new image
-        log.warning("keeping the preview images failed", extra={"job_id": job.job_id})
