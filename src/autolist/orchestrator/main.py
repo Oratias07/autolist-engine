@@ -125,7 +125,9 @@ def gmail() -> Any:  # pragma: no cover - live only
 
     cfg = config()
     return build_service(
-        get_secret(cfg, "gmail_oauth_client"), get_secret(cfg, "gmail_refresh_token")
+        get_secret(cfg, "gmail_oauth_client"),
+        get_secret(cfg, "gmail_refresh_token"),
+        cfg.require("channels.email.api_timeout_s"),  # the service never uses the default
     )
 
 

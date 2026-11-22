@@ -102,3 +102,48 @@ def test_a_thread_subject_replaces_the_template_subject(email_cfg: EmailChannelC
     mime = build_mime(_msg(subject="Re: 2 מוצרים"), email_cfg, REPLIES)
     assert mime["Subject"] == "Re: 2 מוצרים"
     assert build_mime(_msg(), email_cfg, REPLIES)["Subject"] != "Re: 2 מוצרים"
+
+
+def _sent_meta(cfg: EmailChannelConfig) -> dict[str, object]:
+    return {
+        "id": "g-found",
+        "threadId": "t1",
+        "internalDate": "1000",
+        "labelIds": ["SENT"],
+        "payload": {"headers": [{"name": "From", "value": cfg.agent_mailbox}]},
+    }
+
+
+def test_every_mail_carries_our_own_message_id(email_cfg: EmailChannelConfig) -> None:
+    mime = build_mime(_msg(), email_cfg, REPLIES)
+    assert str(mime["Message-ID"]).startswith("<") and str(mime["Message-ID"]).endswith(">")
+
+
+def test_a_send_that_timed_out_but_was_sent_is_found_and_never_sent_twice(
+    email_cfg: EmailChannelConfig,
+) -> None:
+    """YTS-1007 (22.11.2026): the preview was sent, the reply timed out, the job failed."""
+    gmail = FakeGmail(
+        {
+            "send": [TimeoutError("The read operation timed out")],
+            "history.list": [{"messages": []}, {"messages": [{"id": "g-found"}]}],
+            "get": [_sent_meta(email_cfg)],
+        }
+    )
+    waits: list[float] = []
+    sender = GmailSender(gmail, email_cfg, REPLIES, sleep=waits.append)
+    assert sender.send(_msg()) == "g-found"
+    assert [c[0] for c in gmail.calls].count("send") == 1
+    assert waits == [2.0, 5.0]
+    query = next(kw["q"] for name, kw in gmail.calls if name == "history.list")
+    assert query.startswith("rfc822msgid:") and query.endswith(" in:sent")
+
+
+def test_a_send_that_timed_out_and_is_not_in_sent_still_fails(
+    email_cfg: EmailChannelConfig,
+) -> None:
+    gmail = FakeGmail({"send": [TimeoutError("timed out")], "history.list": [{"messages": []}] * 3})
+    sender = GmailSender(gmail, email_cfg, REPLIES, sleep=lambda _s: None)
+    with pytest.raises(TimeoutError):
+        sender.send(_msg())
+    assert [c[0] for c in gmail.calls].count("send") == 1

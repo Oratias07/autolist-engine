@@ -133,3 +133,7 @@ Gmail API calls. Pub/Sub ack. Label changes on the agent mailbox.
 ## Amendment (2026-11-15, P1-08): the agent's own sent messages
 `email/own_sent.py`: `sent_by_rfc_id` and `sent_by_gmail_id` return the thread and send time of a message only when it is `SENT` from `agent_mailbox`. Only a well-formed Message-ID goes into the Gmail search (`rfc822msgid:… in:sent`). Read-only.
 - `OutboundMessage.subject` (DEV 22.11.2026), when set, replaces the template's subject: the job thread's one fixed subject. It comes from the owner's own subject or the store fragment `_thread_subject`, never from code.
+- **Send timeouts (live 22.11.2026, YTS-1007):**
+  - A preview send with images timed out reading Gmail's reply after the mail was sent, and the job failed.
+  - Every mail now carries our own Message-ID. After a timeout the sender looks for it in Sent (2, 5 and 10 s); when found, the send counts as done, and it is never sent twice.
+  - The service builds the Gmail client with `channels.email.api_timeout_s`, required (the library default is 60 s). A warning is logged if Gmail ever replaces our Message-ID.

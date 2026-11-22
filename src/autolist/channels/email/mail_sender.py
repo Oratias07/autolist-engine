@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import base64
 import html
+import time
+from collections.abc import Callable
 from email.message import EmailMessage
+from email.utils import make_msgid
 from pathlib import Path
 from typing import Any
 
+from autolist.channels.email.own_sent import sent_by_rfc_id
 from autolist.channels.errors import AttachmentRejected, RecipientNotAllowed
 from autolist.channels.templates import render_reply
 from autolist.core.logging import get_logger
@@ -49,6 +53,8 @@ def build_mime(
     mime["From"] = config.agent_mailbox
     mime["To"] = msg.to
     mime["Subject"] = msg.subject or reply.subject
+    # our own Message-ID: after a send timeout the sent mail is found by it (live 22.11.2026)
+    mime["Message-ID"] = make_msgid(domain=config.agent_mailbox.rsplit("@", 1)[-1])
     if msg.in_reply_to:
         mime["In-Reply-To"] = msg.in_reply_to
         mime["References"] = msg.in_reply_to
@@ -77,6 +83,9 @@ def _html(body: str, config: EmailChannelConfig) -> str:
     )
 
 
+FIND_SENT_WAITS_S = (2.0, 5.0, 10.0)  # Gmail needs a moment to list a sent mail
+
+
 class GmailSender:
     """``service`` is a Gmail API client (googleapiclient) authorised as the agent mailbox."""
 
@@ -86,11 +95,14 @@ class GmailSender:
         config: EmailChannelConfig,
         templates_dir: Path | None = None,
         extra_recipients: frozenset[str] = frozenset(),
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._service = service
         self._config = config
         self._templates_dir = templates_dir
         self._extra = extra_recipients
+        self._sleep = sleep
+        self._last_rfc: str | None = None
 
     def deliver(self, msg: OutboundMessage) -> SentMessage:
         """Send, then read back the thread id and the Message-ID header (owner replies quote it)."""
@@ -104,6 +116,9 @@ class GmailSender:
         headers = {
             h["name"].lower(): h["value"] for h in meta.get("payload", {}).get("headers", [])
         }
+        if headers.get("message-id") != self._last_rfc:
+            # the timeout recovery finds a mail by our Message-ID: watch that Gmail keeps it
+            log.warning("gmail replaced our Message-ID", extra={"template": msg.template})
         return SentMessage(
             gmail_id=gmail_id,
             thread_id=str(meta["threadId"]),
@@ -112,10 +127,31 @@ class GmailSender:
 
     def send(self, msg: OutboundMessage) -> str:
         mime = build_mime(msg, self._config, self._templates_dir, self._extra)
+        self._last_rfc = str(mime["Message-ID"])
         body: dict[str, str] = {"raw": base64.urlsafe_b64encode(mime.as_bytes()).decode()}
         if msg.thread_id:
             body["threadId"] = msg.thread_id
-        sent = self._service.users().messages().send(userId="me", body=body).execute()
-        message_id = str(sent["id"])
+        try:
+            sent = self._service.users().messages().send(userId="me", body=body).execute()
+            message_id = str(sent["id"])
+        except (TimeoutError, OSError) as exc:
+            # the reply timed out, but the mail may well be sent (YTS-1007, 22.11.2026). Never
+            # send twice: look for it in Sent by its Message-ID; only if it is not there, fail.
+            found = self._find_sent(str(mime["Message-ID"]))
+            if found is None:
+                raise
+            log.warning(
+                "send timed out but the mail was sent",
+                extra={"template": msg.template, "error": type(exc).__name__},
+            )
+            message_id = found
         log.info("mail sent", extra={"template": msg.template, "gmail_id": message_id})
         return message_id
+
+    def _find_sent(self, rfc_id: str) -> str | None:
+        for wait_s in FIND_SENT_WAITS_S:
+            self._sleep(wait_s)
+            info = sent_by_rfc_id(self._service, rfc_id, config=self._config)
+            if info is not None:
+                return info.gmail_id
+        return None
