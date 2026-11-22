@@ -13,6 +13,7 @@ from autolist.content.writer import (
     write_listing,
     writer_facts,
 )
+from autolist.core.errors import ConfigMissing
 from autolist.core.models import JobFact
 from autolist.llm.client import LLMRequest, LLMResult
 
@@ -22,7 +23,10 @@ SECTIONS: list[dict[str, Any]] = [
     {"id": "specs", "heading": "מפרט טכני:"},
     {"id": "benefits", "heading": "יתרונות עיקריים:"},
 ]
-PLAYBOOK: dict[str, Any] = {"title": {"pattern": "x"}, "description": {"sections": SECTIONS}}
+PLAYBOOK: dict[str, Any] = {
+    "title": {"pattern": "x", "max_length": {"value": 120}},
+    "description": {"sections": SECTIONS},
+}
 GLOSSARY: dict[str, Any] = {"terms": [{"term": "כיסא"}]}
 
 
@@ -179,3 +183,24 @@ def test_no_benefits_heading_over_an_empty_list() -> None:
     body_html, body_text = render(desc, SECTIONS)
     benefits = next(s for s in SECTIONS if s["id"] == "benefits")
     assert benefits["heading"] not in body_html and benefits["heading"] not in body_text
+
+
+def test_a_written_title_over_max_length_is_a_problem() -> None:
+    llm = FakeLLM(_title(title="כיסא משרדי CH-200 " + "א" * 110), _desc())
+    out = write_listing(
+        FACTS, llm=llm, playbook=PLAYBOOK, glossary=GLOSSARY, voice="ענייני", job_id="JOB-1001"
+    )
+    assert any("max_length" in p for p in out.problems)
+
+
+def test_no_max_length_in_the_playbook_is_config_missing() -> None:
+    llm = FakeLLM(_title(), _desc())
+    with pytest.raises(ConfigMissing, match=r"title\.max_length"):
+        write_listing(
+            FACTS,
+            llm=llm,
+            playbook={**PLAYBOOK, "title": {"pattern": "x"}},
+            glossary=GLOSSARY,
+            voice="ענייני",
+            job_id="JOB-1001",
+        )

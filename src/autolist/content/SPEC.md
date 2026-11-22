@@ -9,6 +9,8 @@ phase: 1 (fast track) / 5
 ## Fast track (phase 1) — approved scope
 Files: `writer.py`, `sanitizer.py`.
 
+A written title longer than `playbook.title.max_length.value` is a text problem. A missing value is `ConfigMissing` (DEV 22.11.2026: 120).
+
 **Inputs.** `write_listing(facts, *, llm, playbook, glossary, voice, job_id)`:
 - `facts`: the job's `JobFact` list. The latest fact per key wins (a reply can correct a fact).
 - Only `name`, `model`, `barcode`, `keywords` are given to the writer, numbered `F1..` in that order. Price, sale price, quantity and the category hint never enter the text.
