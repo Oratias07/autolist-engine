@@ -210,3 +210,42 @@ async def test_a_name_longer_than_max_length_is_not_cut_the_owner_is_asked() -> 
     mail = _job_mails(rig, "T-1")[-1]
     assert mail.template == "needs_info"
     assert "_title_too_long" in mail.variables["questions_list"]
+
+
+async def test_cancel_after_a_clarifying_question_opens_nothing() -> None:
+    """The products waited for a clarification; "בטל" must not open them."""
+    rig = Rig(
+        extraction(
+            [item(photo_indexes=[]), {**SECOND, "photo_indexes": []}],
+            unassigned_photos=[1, 2],
+            questions=["איזו תמונה לכל מוצר?"],
+        )
+    )
+    rig.messages["g1"] = email(TWO, photos=2, subject="2 מוצרים")
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    rig.llm.extract = extraction([item(), SECOND])  # would open both, if it were asked
+    rig.messages["g2"] = email("בטל", thread="t0", photos=0)
+    extracted = rig.llm.prompts.count("extract_request")
+    assert await run_task(rig.rt, {"event": "email_received", "gmail_id": "g2"}) == {"opened": []}
+    assert rig.mail.sent[-1].template == "nothing_to_cancel"
+    assert rig.mail.sent[-1].thread_id == "t0"
+    assert rig.jobs.jobs == {}
+    assert rig.llm.prompts.count("extract_request") == extracted  # no paid call
+
+
+async def test_cancel_in_other_words_after_no_product_found() -> None:
+    """Live 22.11.2026: "כיסא", then "בטל ..." got "no product found" a second time."""
+    rig = Rig(extraction([]))
+    rig.messages["g1"] = email("כיסא", photos=0)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    assert rig.mail.sent[-1].template == "no_product_found"
+    rig.messages["g2"] = email("תבטל בבקשה", thread="t0", photos=0)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g2"})
+    assert rig.mail.templates() == ["no_product_found", "nothing_to_cancel"]
+
+
+async def test_a_new_email_with_a_cancel_word_is_not_a_cancel() -> None:
+    rig = Rig(extraction([]))
+    rig.messages["g1"] = email("מעמד לטלפון, בטלפון נייד", photos=0)
+    await run_task(rig.rt, {"event": "email_received", "gmail_id": "g1"})
+    assert rig.mail.templates() == ["no_product_found"]

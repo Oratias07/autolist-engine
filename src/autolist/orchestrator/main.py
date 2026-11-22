@@ -43,6 +43,7 @@ PROMPTS_IN_USE = (
 REPLIES_IN_USE = (
     "_category_none",
     "_unclear_question",
+    "_title_too_long",
     "cancel_which",
     "cancelled_list",
     "_thread_subject",
@@ -72,6 +73,7 @@ REPLIES_IN_USE = (
     "image_note_printed_text",
     "needs_info",
     "no_product_found",
+    "nothing_to_cancel",
     "out_of_scope",
     "ready_for_approval",
     "received",
