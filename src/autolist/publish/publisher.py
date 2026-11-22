@@ -19,14 +19,22 @@ log = get_logger(__name__)
 MAX_PAGES = 100
 
 
-async def find_duplicate(
-    client: IStoresClient, page_size: int, sku: str | None, model: str
-) -> tuple[str, str, object] | None:
-    """Scan the catalog for a product with the same SKU or model (no server-side search is
-    recorded in the field map). Returns (field, value, product_id) or None.
+def _code(value: object) -> str:
+    return " ".join(str(value or "").split()).casefold()
 
-    ``sku`` None (not known) checks the model only; a store SKU is never matched against an
-    empty value."""
+
+async def find_duplicate(
+    client: IStoresClient, page_size: int, codes: list[str]
+) -> tuple[str, str, object] | None:
+    """Scan the catalog for a product whose model or SKU equals one of ``codes`` (the owner's
+    model and item code). No server-side search is recorded in the field map.
+
+    Returns (store field, value, product_id) or None. Exact match after trimming spaces and
+    case (a variant such as "T8103LG" is another product). An empty store field never
+    matches (DEV 22.11.2026: M2275 was in the store as model "Tenerife", SKU "M2275")."""
+    wanted = {_code(c) for c in codes if _code(c)}
+    if not wanted:
+        raise ValueError("duplicate check needs a model or an item code")
     for page in range(1, MAX_PAGES + 1):
         data = await client.list_products(limit=page_size, page=page)
         products = data.get("products") if isinstance(data, Mapping) else None
@@ -35,10 +43,10 @@ async def find_duplicate(
         for p in products:
             if not isinstance(p, Mapping):
                 continue
-            if sku is not None and str(p.get("sku") or "") == sku:
-                return ("sku", sku, p.get("product_id"))
-            if str(p.get("model") or "") == model:
-                return ("model", model, p.get("product_id"))
+            for field in ("model", "sku"):
+                value = _code(p.get(field))
+                if value and value in wanted:
+                    return (field, str(p.get(field)), p.get("product_id"))
         if len(products) < page_size:
             return None
     raise RuntimeError(f"catalog scan did not end within {MAX_PAGES} pages")
@@ -95,7 +103,9 @@ async def create_hidden(
     """
     if len(draft.extra_images) != len({r.name for r in draft.extra_images}):
         raise UnobservedField("extra images must be distinct objects")
-    dup = await find_duplicate(client, page_size, draft.sku, draft.model)
+    dup = await find_duplicate(
+        client, page_size, [c for c in (draft.model, draft.sku) if c is not None]
+    )
     if dup is not None:
         raise DuplicateProduct(*dup)
     url = blobs.signed_url(draft.main_image, config.publishing.image_url_ttl_s)

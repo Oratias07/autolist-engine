@@ -358,3 +358,14 @@ async def test_an_alert_that_cannot_be_sent_never_hides_the_real_failure() -> No
     job = rig.jobs.get("T-1")
     assert job is not None and job.state == S.FAILED
     assert rig.mail.templates()[-1] == "failed"
+
+
+async def test_a_store_sku_equal_to_the_owner_model_is_a_duplicate() -> None:
+    """DEV 22.11.2026: M2275 was missed because the store keeps it as model "Tenerife"."""
+    rig = _rig(extraction([item()]), catalog=[{"sku": "C1", "model": "Tenerife", "product_id": 78}])
+    await _email(rig)
+    job = rig.jobs.get("T-1")
+    assert job is not None and job.state == S.CANCELLED and job.error == "duplicate sku"
+    dup = rig.mail.sent[-1]
+    assert dup.template == "duplicate_found" and dup.variables["match_field"] == "item-code-label"
+    assert rig.llm.prompts == ["extract_request"]

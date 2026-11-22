@@ -263,3 +263,41 @@ async def test_a_missing_category_on_the_store_fails_the_verify() -> None:
     blobs = InMemoryBlobStore()
     with pytest.raises(VerifyMismatch, match="categories"):
         await _run(Store(category={}), _draft(blobs, category_ids=[97008]), blobs)
+
+
+@pytest.mark.parametrize(
+    ("catalog", "codes", "found"),
+    [
+        # DEV 22.11.2026: M2275 is in the store as model "Tenerife", SKU "M2275"
+        ([{"product_id": 7, "model": "Tenerife", "sku": "M2275"}], ["M2275"], ("sku", "M2275", 7)),
+        ([{"product_id": 7, "model": " m2275 ", "sku": ""}], ["M2275"], ("model", " m2275 ", 7)),
+        (
+            [{"product_id": 7, "model": "x", "sku": "301498"}],
+            ["C1", "301498"],
+            ("sku", "301498", 7),
+        ),
+        ([{"product_id": 7, "model": "T8103LG", "sku": "T8103LG"}], ["T8103"], None),  # a variant
+        ([{"product_id": 7, "model": "", "sku": ""}], ["M2275"], None),
+    ],
+)
+async def test_duplicate_matches_any_owner_code_against_model_or_sku(
+    catalog: list[dict[str, Any]], codes: list[str], found: Any
+) -> None:
+    from autolist.publish.publisher import find_duplicate
+
+    client, *_ = make_client(Store(catalog=catalog))
+    try:
+        assert await find_duplicate(client, 100, codes) == found
+    finally:
+        await client.aclose()
+
+
+async def test_duplicate_check_without_any_code_refuses() -> None:
+    from autolist.publish.publisher import find_duplicate
+
+    client, *_ = make_client(Store())
+    try:
+        with pytest.raises(ValueError, match="model or an item code"):
+            await find_duplicate(client, 100, ["  "])
+    finally:
+        await client.aclose()
