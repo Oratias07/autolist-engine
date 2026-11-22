@@ -1,7 +1,9 @@
 """HTTP entrypoints of the service (infra/SPEC.md). Wiring only.
 
-Authentication is done by Cloud Run: the service is not public, and only the invoker service
-account may call it. Handlers therefore trust the caller and validate only the payload shape.
+Authentication is done by Cloud Run: the service is not public. A second gate reads the caller
+from the token Cloud Run checked: only the invoker account may call any path, and the deploy
+check's accounts only ``/health`` (``gcp.caller_check``: ``log`` records the caller, ``enforce``
+also answers 403). Handlers validate only the payload shape.
 `/tasks/job` runs one job step (``job_runner.run_task``); `/cron/watchdog` runs the daily
 watchdog. A step error is logged and answered with 500; Cloud Tasks does not retry (max 1).
 """
@@ -16,11 +18,14 @@ from typing import Any
 
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from autolist.channels.email.inbox import poll_accepted, renew_watch
+from autolist.core.caller import allowed, caller_email
 from autolist.core.logging import get_logger
 from autolist.core.models import StoreConfig
 from autolist.core.state_store import ChannelStateStore, ProcessedMessages
@@ -112,12 +117,29 @@ def create_app(deps: Deps) -> Starlette:
     async def cron_watchdog(_: Request) -> JSONResponse:
         return JSONResponse(await run_in_threadpool(run_watchdog, deps.runtime()))
 
+    gcp = deps.config.gcp
+
+    async def caller_gate(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if gcp.invoker_service_account is None:
+            log.error("caller refused: gcp.invoker_service_account is not set")
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        email = caller_email(request.headers)
+        ok = allowed(request.url.path, email, gcp.invoker_service_account, gcp.health_callers)
+        log.info(
+            "caller",
+            extra={"path": request.url.path, "caller": email or "-", "allowed": ok},
+        )
+        if not ok and gcp.caller_check == "enforce":
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        return await call_next(request)
+
     return Starlette(
+        middleware=[Middleware(BaseHTTPMiddleware, dispatch=caller_gate)],
         routes=[
             Route("/health", healthz, methods=["GET"]),
             Route("/events/gmail", gmail_push, methods=["POST"]),
             Route("/cron/renew-watch", cron_renew_watch, methods=["POST"]),
             Route(JOB_TASK_PATH, task_job, methods=["POST"]),
             Route("/cron/watchdog", cron_watchdog, methods=["POST"]),
-        ]
+        ],
     )

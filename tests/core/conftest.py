@@ -24,7 +24,9 @@ VALID_STORE: dict[str, Any] = {
         "region": None,
         "reference_bucket": None,
         "tasks_queue": None,
-        "invoker_service_account": None,
+        "invoker_service_account": "invoke@example.iam.gserviceaccount.com",
+        "health_callers": ["deploy@example.iam.gserviceaccount.com"],
+        "caller_check": "log",
     },
     "secrets": {
         "istores_token": "istores-token",

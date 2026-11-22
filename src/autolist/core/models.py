@@ -52,6 +52,10 @@ class GcpConfig(_Strict):
     reference_bucket: str | None
     tasks_queue: str | None  # Cloud Tasks queue of job steps (infra setup part 1)
     invoker_service_account: str | None  # the only identity allowed to call the service
+    # callers of /health besides the invoker (the deploy check), and whether the app only logs
+    # the caller or also refuses others (security review 22.11.2026, H1)
+    health_callers: list[str]
+    caller_check: Literal["log", "enforce"]
 
 
 class SecretsConfig(_Strict):

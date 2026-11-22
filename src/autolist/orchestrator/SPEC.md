@@ -69,6 +69,8 @@ Only through `channel.send`. Draining the outbox is the ledger's own state chang
 ## Entrypoints (P1-03, behaviour approved in `infra/SPEC.md` on 2026-11-14)
 Files: `entrypoints.py` (Starlette app, wiring only) and `tasks_queue.py` (Cloud Tasks).
 
+Caller gate (security review 22.11.2026, H1): every request is checked with `core.caller`. Only `gcp.invoker_service_account` may call any path; `gcp.health_callers` may also call `/health`. With `gcp.caller_check: log` the caller and the verdict are logged and nothing is refused. With `enforce`, anyone else gets 403. An unset invoker always gets 403. `log` comes first, until the callers' `email` claim is seen in real logs (rule 6).
+
 | Route | Behaviour |
 | --- | --- |
 | `GET /health` | Returns the injected health report; 503 when it is not ok. |
