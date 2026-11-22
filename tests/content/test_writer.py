@@ -171,3 +171,11 @@ def test_details_reach_the_writer_and_the_item_code_does_not() -> None:
 def test_item_code_stands_in_for_a_missing_model() -> None:
     facts = [_f("name", "שקיות אשפה"), _f("item_code", "301498")]
     assert [f["text"] for f in writer_facts(facts)] == ["name: שקיות אשפה", "model: 301498"]
+
+
+def test_no_benefits_heading_over_an_empty_list() -> None:
+    """DEV 22.11.2026 (stage A): an empty "יתרונות" heading is not shown."""
+    desc = _desc().model_copy(update={"benefits": []})
+    body_html, body_text = render(desc, SECTIONS)
+    benefits = next(s for s in SECTIONS if s["id"] == "benefits")
+    assert benefits["heading"] not in body_html and benefits["heading"] not in body_text

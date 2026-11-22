@@ -195,3 +195,21 @@ def test_no_lifestyle_attaches_no_image_3() -> None:
     preview = _build(_job())
     assert "image-3.jpg" not in [a.filename for a in preview.message.attachments]
     assert not preview.lifestyle
+
+
+@pytest.mark.parametrize(
+    ("value", "shown"),
+    [
+        ("7.9", "7.90"),
+        ("7.90", "7.90"),
+        ("1190", "1,190"),
+        ("1,190", "1,190"),
+        ("1190.5", "1,190.50"),
+        ("25", "25"),
+        ("בערך 20", "בערך 20"),
+    ],
+)
+def test_prices_are_shown_as_money(value: str, shown: str) -> None:
+    from autolist.review.preview import shekels
+
+    assert shekels(value) == shown

@@ -77,3 +77,4 @@ File: `categories.py`.
 - The product facts sent are name, keywords and details. Price never is.
 - `parse_store_categories` reads `GET /categories` (shape observed in P0-05).
 - Eval: `scripts/spike/category_eval.py`.
+- **Empty benefits (DEV 22.11.2026, stage A):** no "יתרונות" heading over an empty list.

@@ -24,6 +24,7 @@ from autolist.images.generator import ImageGenerator
 from autolist.llm.client import LLMClient
 from autolist.orchestrator.tasks_queue import TaskQueue
 from autolist.publish.istores_client import IStoresClient
+from autolist.review.preview import shekels
 
 JOB_TASK_PATH = "/tasks/job"
 
@@ -113,7 +114,7 @@ def sale_text(rt: Runtime, job: Job) -> str:
     return rt.fragment(
         SALE_VALUE,
         {
-            "sale_price": sale.value if sale else str(spec.price),
+            "sale_price": shekels(sale.value if sale else str(spec.price)),
             "sale_end": f"{end.day}.{end.month}.{end.year}",
         },
     )
