@@ -2,8 +2,8 @@
 
 Email-driven product listing agent. The owner emails a product or a supplier invoice. The agent researches it, writes the copy, generates images, and sends a preview. It publishes to the store only after the owner approves that exact version.
 
-- **Engine (this repo):** generic code, no client data. Private.
-- **Store repo (one per client):** playbook, agent tools/prompts/replies, docs, `store.yaml`, task lists.
+- **Engine (this repo):** generic code, no client data.
+- **Store repo (one per client):** playbook, agent tools/prompts/replies, docs, `store.yaml`, task lists. Private.
 
 ## Local setup
 ```bash
